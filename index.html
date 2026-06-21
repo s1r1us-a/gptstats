@@ -131,9 +131,14 @@ main{max-width:1280px;margin:0 auto;padding:34px 24px 80px}
 
 /* heatmap */
 .heatmap{overflow-x:auto;padding-bottom:6px}
-.heatgrid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,1fr);gap:4px;min-width:max-content}
-.heatcell{width:15px;height:15px;border-radius:4px;background:rgba(255,255,255,.05);transition:.15s}
-.heatcell:hover{outline:2px solid #fff;transform:scale(1.25)}
+.heatwrap{display:grid;grid-template-columns:auto auto;column-gap:8px;row-gap:6px;width:max-content}
+.heatmonths{display:grid;grid-auto-flow:column;grid-auto-columns:16px;gap:4px;align-items:end}
+.heatmonths .hm{font-size:10px;color:var(--muted);white-space:nowrap;overflow:visible;height:13px}
+.heatdays{display:grid;grid-template-rows:repeat(7,16px);gap:4px;font-size:9.5px;color:var(--muted)}
+.heatdays span{height:16px;display:flex;align-items:center}
+.heatgrid{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,16px);gap:4px;min-width:max-content}
+.heatcell{width:16px;height:16px;border-radius:4px;background:rgba(255,255,255,.035);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);transition:.15s}
+.heatcell:hover{outline:2px solid #fff;transform:scale(1.2);z-index:1}
 .heatlegend{display:flex;align-items:center;gap:7px;justify-content:flex-end;margin-top:12px;font-size:11px;color:var(--muted)}
 .heatlegend .hc{width:13px;height:13px;border-radius:4px}
 
@@ -234,10 +239,12 @@ main{max-width:1280px;margin:0 auto;padding:34px 24px 80px}
     <div class="dropzone" id="dropzone">
       <div class="ic">⬆️</div>
       <h3>Dateien hierher ziehen</h3>
-      <p>Alle <code>conversations-*.json</code> &amp; <code>conversation_asset_file_names.json</code></p>
+      <p><code>conversations-*.json</code> nötig · <code>conversation_asset_file_names.json</code> optional</p>
       <span class="pick">Dateien auswählen</span>
       <input type="file" id="fileinput" multiple accept=".json,application/json" style="display:none">
     </div>
+
+    <div class="note" style="margin-top:14px">ℹ️ Die <code>conversation_asset_file_names.json</code> ist <b>optional</b>: Sie liefert nur die Datei-Statistik („Geteilte Dateien“) und echte Dateinamen im Chat-Reader. Alle übrigen Auswertungen stammen ausschließlich aus den <code>conversations</code>-Dateien.</div>
 
     <div class="filelist" id="filelist"></div>
     <div class="privacy">🔒 100 % lokal – deine Daten verlassen niemals deinen Browser. Es findet kein Upload zu einem Server statt.</div>
@@ -433,7 +440,15 @@ function parseAll(){
     file.forEach(c=>{
       const nodes=linearPath(c);
       const messages=[];
-      Object.values(c.mapping||{}).forEach(()=>{}); // noop
+      // Voice-Typ erkennen: Live/Advanced Voice (real_time-Teil) vs. Standard-Sprachnachricht
+      let hasLive=false;
+      Object.values(c.mapping||{}).forEach(n=>{
+        const mm=n.message; if(!mm) return;
+        const pp=mm.content&&mm.content.parts;
+        if(Array.isArray(pp)) for(const p of pp){
+          if(p&&typeof p==='object'&&p.content_type==='real_time_user_audio_video_asset_pointer'){hasLive=true;break;}
+        }
+      });
       nodes.forEach(n=>{
         const m=n.message;
         if(!m) return;
@@ -443,12 +458,27 @@ function parseAll(){
         const isThinking = ct==='thoughts'||ct==='reasoning_recap';
         const txt=cleanText(extractText(m.content)).trim();
         if(!txt && role!=='user') return;
+        const md=m.metadata||{};
+        // hochgeladene Bilder zählen (image_asset_pointer ohne Generierungs-Marker = Upload)
+        const parts=m.content&&m.content.parts;
+        let imgUp=0;
+        if(Array.isArray(parts)) for(const p of parts){
+          if(p&&typeof p==='object'&&p.content_type==='image_asset_pointer'){
+            const pm=p.metadata||{};
+            if(!(pm.dalle||pm.generation||pm.watermarked_asset_pointer)) imgUp++;
+          }
+        }
         messages.push({
           role, ct, isThinking,
           text:txt,
           time:m.create_time||null,
-          model:(m.metadata&&m.metadata.model_slug)||null,
+          model:md.model_slug||null,
           attachments:attachmentsFor(m),
+          web: Array.isArray(md.search_result_groups)&&md.search_result_groups.length>0,
+          cites: Array.isArray(md.content_references)&&md.content_references.length>0,
+          code: !!(md.code_blocks&&typeof md.code_blocks==='object'&&Object.keys(md.code_blocks).length>0),
+          imgUp,
+          imgReq: !!md.image_prompt_id,
         });
       });
       // dedupe consecutive identical (regeneration artifacts)
@@ -458,6 +488,7 @@ function parseAll(){
         create:c.create_time||null,
         update:c.update_time||null,
         voice:!!c.voice,
+        live:hasLive,
         messages,
       });
     });
@@ -478,16 +509,22 @@ function computeStats(convs){
     nConv:convs.length, nMsg:0, nUser:0, nAssistant:0,
     nThinking:0, nWords:0, nUserWords:0, nAssistantWords:0,
     nVoice:0, nVoiceUser:0, nVoiceAssistant:0, nVoiceMsg:0, nAttachMsg:0,
+    nLive:0, nStdVoice:0, nWeb:0, nCites:0, nCodeMsg:0, nImgUp:0, nImgReq:0,
     models:{}, contentTypes:{},
     perDay:{}, perHour:Array(24).fill(0), perWeekday:Array(7).fill(0),
     convLens:[], respLatencies:[], longestMsg:{len:0},
     minTime:Infinity, maxTime:0,
   };
   convs.forEach(c=>{
-    if(c.voice) s.nVoice++;
+    if(c.voice){ s.nVoice++; if(c.live) s.nLive++; else s.nStdVoice++; }
     let len=0, lastUserTime=null, hadAttach=false;
     c.messages.forEach(m=>{
       s.nMsg++;
+      if(m.web) s.nWeb++;
+      if(m.cites) s.nCites++;
+      if(m.code) s.nCodeMsg++;
+      if(m.imgUp) s.nImgUp+=m.imgUp;
+      if(m.imgReq) s.nImgReq++;
       const w=m.text?m.text.split(/\s+/).filter(Boolean).length:0;
       if(m.isThinking){ s.nThinking++; }
       else {
@@ -574,7 +611,27 @@ function renderDashboard(){
   const streak=longestStreak(days);
   const thinkPct=totalMsg? Math.round(s.nThinking/totalMsg*100):0;
 
+  // weitere abgeleitete Werte
+  const medResp=median(s.respLatencies);
+  const avgRespT=s.respLatencies.length? s.respLatencies.reduce((a,b)=>a+b,0)/s.respLatencies.length:0;
+  const avgWordsDay=activeDays? Math.round(s.nWords/activeDays):0;
+  const fullWd=['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
+  const peakHour=s.perHour.indexOf(Math.max(...s.perHour));
+  const peakWd=s.perWeekday.indexOf(Math.max(...s.perWeekday));
+  const modelE=Object.entries(s.models).sort((a,b)=>b[1]-a[1]);
+  const nModels=modelE.length;
+  // längste Pause zwischen zwei aktiven Tagen
+  const sortedDays=days.slice().sort();
+  let pause={days:0,from:null,to:null};
+  for(let i=1;i<sortedDays.length;i++){
+    const g=Math.round((new Date(sortedDays[i])-new Date(sortedDays[i-1]))/86400000);
+    if(g>pause.days) pause={days:g,from:sortedDays[i-1],to:sortedDays[i]};
+  }
+
   const msgTip='In Voice-Chats antwortet die KI per Audio – diese Antworten werden als .wav-Datei gespeichert und zählen nicht als Text. Darum erscheinen mehr Nachrichten von dir. Klick auf „Ohne Voice“ für die reine Text-Bilanz.';
+  const liveTip='Live / Advanced Voice Mode: das durchgehende Echtzeit-Gespräch (der animierte Kreis). In deinem Export der häufigste Voice-Typ.';
+  const stdVoiceTip='Klassische Sprachnachricht: du sprichst eine einzelne Nachricht ein, sie wird transkribiert, die KI antwortet rundenbasiert.';
+  const imgTip='Nur von dir hochgeladene Bilder. KI-generierte Bilder sind im ChatGPT-Export leider nicht als Daten enthalten und lassen sich daher nicht zählen.';
   el.innerHTML=`
   <div class="section-title with-ctrl">📊 Überblick
     <div class="vtoggle" id="vtoggle">
@@ -588,15 +645,24 @@ function renderDashboard(){
     ${statCard('Nachrichten gesamt',nf(totalMsg),'✉️','c2','accentC2',`${nf(s.nUser)} von dir · ${nf(s.nAssistant)} KI`, STATE.excludeVoice?'':msgTip)}
     ${statCard('Wörter geschrieben',nf(s.nWords),'✍️','c3','accentC3',`${nf(s.nUserWords)} von dir`)}
     ${statCard('Aktive Tage',nf(activeDays),'📅','c4','accentC4',`längste Serie: ${streak} Tage`)}
-    ${statCard('Ø Nachrichten / Chat',avgMsg,'📈','c5','accentC5','')}
-    ${statCard('Ø Antwortlänge',nf(avgResp)+' W','🤖','c1','accentC1','pro KI-Antwort')}
-    ${statCard('Längste Antwort',nf(s.longestMsg.len)+' W','📜','c2','accentC2','in einer Nachricht')}
-    ${statCard('Ø deine Nachricht',nf(avgUserLen)+' W','⌨️','c4','accentC4','Wörter pro Frage')}
-    ${statCard('Voice-Chats',nf(s.nVoice),'🎙️','c3','accentC3','')}
-    ${statCard('Sprach-Nachrichten',nf(s.nVoiceMsg),'🗣️','c1','accentC1', s.nVoiceMsg?`${nf(s.nVoiceUser)} von dir · KI per Audio`:'in Voice-Chats')}
-    ${statCard('Thinking-Blöcke',nf(s.nThinking),'🧠','c5','accentC5',thinkPct+'% aller Nachrichten')}
-    ${statCard('Chats mit Anhang',nf(s.nAttachMsg),'📎','c4','accentC4','')}
-    ${statCard('Geteilte Dateien',nf(s.assets.total),'🗂️','c2','accentC2', s.assets.total? `${s.assets.audio} Audio · ${s.assets.image} Bilder`:'kein Asset-File')}
+    ${statCard('Längste Pause',nf(pause.days),'⏸️','c5','accentC5', pause.days? `Tage ohne Chat · ${fmtDate2(pause.from)} → ${fmtDate2(pause.to)}`:'keine Lücke')}
+    ${statCard('Ø Nachrichten / Chat',avgMsg,'📈','c1','accentC1','')}
+    ${statCard('KI-Antwortzeit',medResp?fmtDur(medResp):'–','⚡','c2','accentC2', medResp?`Median · Ø ${fmtDur(avgRespT)}`:'keine Daten','Zeit zwischen deiner Nachricht und der KI-Antwort (nur Antworten unter 1 Stunde).')}
+    ${statCard('Ø Antwortlänge',nf(avgResp)+' W','🤖','c3','accentC3','pro KI-Antwort')}
+    ${statCard('Längste Antwort',nf(s.longestMsg.len)+' W','📜','c4','accentC4','in einer Nachricht')}
+    ${statCard('Ø deine Nachricht',nf(avgUserLen)+' W','⌨️','c5','accentC5','Wörter pro Frage')}
+    ${statCard('Ø Wörter / Tag',nf(avgWordsDay),'🗓️','c1','accentC1','an aktiven Tagen')}
+    ${statCard('Aktivste Stunde',s.perHour[peakHour]? peakHour+':00':'–','🕐','c2','accentC2', s.perHour[peakHour]?`${nf(s.perHour[peakHour])} Nachrichten`:'')}
+    ${statCard('Aktivster Tag',s.perWeekday[peakWd]? fullWd[peakWd]:'–','📆','c3','accentC3', s.perWeekday[peakWd]?`${nf(s.perWeekday[peakWd])} Nachrichten`:'')}
+    ${statCard('Modelle genutzt',nf(nModels),'🧬','c4','accentC4', modelE.length?`meist: ${modelE[0][0]}`:'')}
+    ${statCard('Live-Voice',nf(s.nLive),'🎧','c5','accentC5','Echtzeit-Gespräche',liveTip)}
+    ${statCard('Sprachnachrichten',nf(s.nStdVoice),'🎙️','c1','accentC1','Standard (transkribiert)',stdVoiceTip)}
+    ${statCard('Thinking-Blöcke',nf(s.nThinking),'🧠','c2','accentC2',thinkPct+'% aller Nachrichten')}
+    ${s.nWeb? statCard('Web-Suchen',nf(s.nWeb),'🌐','c3','accentC3',`${nf(s.nCites)} Antworten mit Quellen`,'Wie oft die KI für ihre Antwort im Web gesucht hat.'):''}
+    ${s.nCodeMsg? statCard('Antworten mit Code',nf(s.nCodeMsg),'💻','c4','accentC4','enthalten Code-Blöcke'):''}
+    ${s.nImgUp? statCard('Hochgeladene Bilder',nf(s.nImgUp),'🖼️','c5','accentC5','von dir gesendet',imgTip):''}
+    ${statCard('Chats mit Anhang',nf(s.nAttachMsg),'📎','c1','accentC1','')}
+    ${statCard('Geteilte Dateien',nf(s.assets.total),'🗂️','c2','accentC2', s.assets.total? `${s.assets.audio} Audio · ${s.assets.image} Bilder`:'optional – conversations reichen')}
     ${statCard('Spitzentag',busiest?nf(busiest[1]):'–','🔥','c3','accentC3',busiest?fmtDate2(busiest[0]):'')}
   </div>
 
@@ -697,20 +763,53 @@ function buildHeatmap(s){
   start.setDate(start.getDate()-((start.getDay()+6)%7)); // back to Monday
   const end=new Date(s.maxTime*1000);
   const max=Math.max(...Object.values(s.perDay),1);
-  const grid=document.createElement('div');grid.className='heatgrid';
+  const monShort=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+  // in Wochen-Spalten (Mo–So) gruppieren
+  const weeks=[]; let cur=[];
   for(let d=new Date(start); d<=end; d.setDate(d.getDate()+1)){
     const key=dayKey(d);
-    const v=s.perDay[key]||0;
-    const cell=document.createElement('div');cell.className='heatcell';
-    if(v>0){
-      const r=v/max;
-      const a=.12+r*.78;
-      cell.style.background=`rgba(0,229,255,${a.toFixed(2)})`;
-    }
-    cell.title=`${fmtDate2(key)}: ${v} Nachrichten`;
-    grid.appendChild(cell);
+    cur.push({key, v:s.perDay[key]||0, date:new Date(d)});
+    if(((d.getDay()+6)%7)===6){ weeks.push(cur); cur=[]; }
   }
-  cont.innerHTML='';cont.appendChild(grid);
+  if(cur.length) weeks.push(cur);
+
+  // Monats-/Jahres-Labels je Wochen-Spalte
+  let lastMonth=-1, lastYear=-1;
+  const monthLabels=weeks.map(w=>{
+    const dt=w[0].date, m=dt.getMonth(), y=dt.getFullYear();
+    if(m!==lastMonth || y!==lastYear){
+      const lbl=monShort[m]+((y!==lastYear)? " '"+String(y).slice(2):'');
+      lastMonth=m; lastYear=y; return lbl;
+    }
+    return '';
+  });
+
+  const wrap=document.createElement('div'); wrap.className='heatwrap';
+  wrap.appendChild(document.createElement('div')); // leere Ecke
+
+  const monthRow=document.createElement('div'); monthRow.className='heatmonths';
+  monthLabels.forEach(lbl=>{const sp=document.createElement('span');sp.className='hm';sp.textContent=lbl;monthRow.appendChild(sp);});
+  wrap.appendChild(monthRow);
+
+  const dayCol=document.createElement('div'); dayCol.className='heatdays';
+  ['Mo','','Mi','','Fr','','So'].forEach(t=>{const sp=document.createElement('span');sp.textContent=t;dayCol.appendChild(sp);});
+  wrap.appendChild(dayCol);
+
+  const grid=document.createElement('div'); grid.className='heatgrid';
+  weeks.forEach(w=>w.forEach(c=>{
+    const cell=document.createElement('div'); cell.className='heatcell';
+    if(c.v>0){
+      const a=.18+(c.v/max)*.72;
+      cell.style.background=`rgba(0,229,255,${a.toFixed(2)})`;
+      cell.style.boxShadow='none';
+    }
+    cell.title=`${fmtDate2(c.key)}: ${c.v} Nachrichten`;
+    grid.appendChild(cell);
+  }));
+  wrap.appendChild(grid);
+
+  cont.innerHTML=''; cont.appendChild(wrap);
 }
 
 /* ---- charts ---- */
