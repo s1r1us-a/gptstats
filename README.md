@@ -5,7 +5,8 @@ erhalte ein interaktives Dashboard mit Dutzenden Statistiken, einer Aktivitäts-
 durchsuchbaren Chat-Reader.
 
 > 🔒 **100 % lokal.** Die ganze Auswertung läuft in deinem Browser. Es werden keine Daten an einen
-> Server gesendet – es gibt gar kein Backend. Die App ist eine einzige `index.html`.
+> Server gesendet – es gibt gar kein Backend. Es ist eine statische Seite (HTML/CSS/JS), die du
+> einfach per Doppelklick auf `index.html` öffnest – kein Build, keine Installation.
 
 ---
 
@@ -19,6 +20,12 @@ durchsuchbaren Chat-Reader.
 4. Auf **✨ Auswerten** klicken.
 
 Kein Build, keine Installation, keine Abhängigkeiten zum Selbst-Installieren.
+
+### Nur mal reinschauen? (Demo-Modus)
+
+Du willst die App ausprobieren, ohne deinen eigenen Export hochzuladen? Klick auf der Startseite auf
+**„✨ Beispieldaten ansehen“** – ChatInsights lädt dann einen realistisch generierten Demo-Datensatz
+(zufällig erzeugt, kein echter Account) und zeigt dir das komplette Dashboard inklusive Chat-Reader.
 
 ### Welche Dateien?
 
@@ -80,10 +87,18 @@ als auswertbare Daten ab. Im Conversation-JSON tauchen nur deine Uploads als Bil
 
 ## Technik
 
-- Einzelne `index.html`, reines Vanilla JavaScript – kein Framework, kein Build.
+- Statische Seite aus wenigen Dateien, reines Vanilla JavaScript – kein Framework, kein Build:
+  - `index.html` – Markup der drei Ansichten (Upload, Dashboard, Chat-Reader)
+  - `styles.css` – das (helle, von Apple inspirierte) Design-System
+  - `app.js` – Parsing, Statistik, Diagramme, Reader und die Scroll-/Motion-Effekte
+  - `demo.js` – Generator für die Beispieldaten des Demo-Modus
+- Geöffnet wird weiterhin einfach `index.html` (Doppelklick); die Skripte werden lokal als
+  klassische `<script>` geladen, daher funktioniert die Seite auch offline.
 - Per CDN eingebunden: [Chart.js](https://www.chartjs.org/) (Diagramme),
   [marked](https://marked.js.org/) (Markdown), [DOMPurify](https://github.com/cure53/DOMPurify)
   (Sanitizing der gerenderten Inhalte).
+- Bewegung & Effekte: sanfte Scroll-Einblendungen (IntersectionObserver), eine „gepinnte“
+  Parallax-Hero und hochzählende Kennzahlen – alles respektiert `prefers-reduced-motion`.
 - Die Auswertung folgt dem sichtbaren Gesprächsverlauf (vom aktuellen Knoten zurück zur Wurzel),
   damit Regenerierungs-Varianten nicht doppelt zählen.
 
