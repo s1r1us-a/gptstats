@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChatGPT Statistiken</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="nav-brand" href="#top">
+        <span class="nav-logo">✦</span> ChatGPT&nbsp;Stats
+      </a>
+      <div class="nav-links" id="navLinks" hidden>
+        <a href="#uebersicht">Überblick</a>
+        <a href="#aktivitaet">Aktivität</a>
+        <a href="#modelle">Modelle</a>
+        <a href="#reasoning">Reasoning</a>
+        <a href="#gespraeche">Gespräche</a>
+        <a href="#medien">Medien</a>
+        <a href="#websuche">Websuche</a>
+        <a href="#texte">Texte</a>
+        <a href="#funstats">Fun Facts</a>
+      </div>
+      <div class="nav-actions">
+        <span class="demo-badge" id="demoBadge" hidden>Demo-Daten</span>
+        <div class="view-switch" id="viewSwitch" hidden>
+          <button id="viewStatsBtn" class="active">Statistiken</button>
+          <button id="viewReaderBtn">Chats</button>
+        </div>
+        <button class="btn-ghost" id="resetBtn" hidden>Neue Daten</button>
+        <button class="theme-toggle" id="themeToggle" aria-label="Design umschalten">
+          <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="12" r="4.5"/>
+            <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Landing / Dropzone ─────────────────────────────── -->
+  <section class="landing" id="landing">
+    <div class="landing-glow" aria-hidden="true"></div>
+    <div class="landing-content">
+      <h1 class="landing-title">Deine ChatGPT<br><span class="grad-text">Statistiken.</span></h1>
+      <p class="landing-sub">Ziehe die <code>conversations-*.json</code> Dateien deines ChatGPT-Exports hierher —
+      alles wird lokal in deinem Browser ausgewertet. Nichts verlässt deinen Rechner.</p>
+
+      <div class="dropzone glass" id="dropzone" tabindex="0" role="button" aria-label="Dateien auswählen">
+        <div class="dropzone-border" aria-hidden="true"></div>
+        <svg class="dropzone-icon" viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 16V4m0 0 4 4m-4-4L8 8"/>
+          <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+        </svg>
+        <p class="dropzone-text"><strong>Dateien hierher ziehen</strong><br>oder klicken zum Auswählen</p>
+        <p class="dropzone-hint">conversations-000.json, conversations-001.json … · optional: conversation_asset_file_names.json</p>
+        <input type="file" id="fileInput" accept=".json,application/json" multiple hidden>
+      </div>
+
+      <ul class="file-list" id="fileList"></ul>
+      <p class="load-error" id="loadError" hidden></p>
+      <button class="btn-primary" id="analyzeBtn" hidden>Auswerten&nbsp;→</button>
+      <p class="demo-hint">Keine Export-Dateien zur Hand?</p>
+      <button class="btn-ghost" id="demoBtn">🎲 Mit Demo-Daten ausprobieren</button>
+    </div>
+  </section>
+
+  <!-- ── Dashboard ──────────────────────────────────────── -->
+  <main class="dashboard" id="dashboard" hidden>
+
+    <header class="hero section" id="uebersicht">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <p class="section-eyebrow reveal">Dein Export im Überblick</p>
+      <h1 class="hero-title reveal"><span class="grad-text" id="heroHeadline">Hallo.</span></h1>
+      <p class="hero-sub reveal" id="heroSub"></p>
+      <div class="hero-numbers reveal" id="heroNumbers"></div>
+      <div class="stat-grid reveal" id="grid-uebersicht"></div>
+    </header>
+
+    <section class="section reveal" id="aktivitaet">
+      <div class="section-head">
+        <p class="section-eyebrow">Wann du chattest</p>
+        <h2>Aktivität</h2>
+      </div>
+      <div class="stat-grid" id="grid-aktivitaet"></div>
+      <div class="chart-grid" id="charts-aktivitaet"></div>
+    </section>
+
+    <section class="section reveal" id="modelle">
+      <div class="section-head">
+        <p class="section-eyebrow">Womit du sprichst</p>
+        <h2>Modelle</h2>
+      </div>
+      <div class="stat-grid" id="grid-modelle"></div>
+      <div class="chart-grid" id="charts-modelle"></div>
+    </section>
+
+    <section class="section reveal" id="reasoning">
+      <div class="section-head">
+        <p class="section-eyebrow">Wie lange die KI nachdenkt</p>
+        <h2>Reasoning</h2>
+      </div>
+      <div class="stat-grid" id="grid-reasoning"></div>
+      <div class="chart-grid" id="charts-reasoning"></div>
+    </section>
+
+    <section class="section reveal" id="gespraeche">
+      <div class="section-head">
+        <p class="section-eyebrow">Deine Konversationen</p>
+        <h2>Gespräche</h2>
+      </div>
+      <div class="stat-grid" id="grid-gespraeche"></div>
+      <div class="chart-grid" id="charts-gespraeche"></div>
+    </section>
+
+    <section class="section reveal" id="medien">
+      <div class="section-head">
+        <p class="section-eyebrow">Bilder, Voice &amp; Dateien</p>
+        <h2>Medien &amp; Tools</h2>
+      </div>
+      <div class="stat-grid" id="grid-medien"></div>
+      <div class="chart-grid" id="charts-medien"></div>
+    </section>
+
+    <section class="section reveal" id="websuche">
+      <div class="section-head">
+        <p class="section-eyebrow">Was die KI für dich recherchiert</p>
+        <h2>Websuche</h2>
+      </div>
+      <div class="stat-grid" id="grid-websuche"></div>
+      <div class="chart-grid" id="charts-websuche"></div>
+    </section>
+
+    <section class="section reveal" id="texte">
+      <div class="section-head">
+        <p class="section-eyebrow">Worüber du schreibst</p>
+        <h2>Text-Insights</h2>
+      </div>
+      <div class="stat-grid" id="grid-texte"></div>
+      <div class="chart-grid" id="charts-texte"></div>
+    </section>
+
+    <section class="section reveal" id="funstats">
+      <div class="section-head">
+        <p class="section-eyebrow">Zum Schmunzeln</p>
+        <h2>Fun Facts</h2>
+      </div>
+      <div class="funfacts glass" id="funfacts"></div>
+    </section>
+
+    <footer class="footer">
+      <p>Alle Auswertungen laufen lokal in deinem Browser · ChatGPT-Export-Analyse</p>
+    </footer>
+  </main>
+
+  <!-- ── Chat-Reader ────────────────────────────────────── -->
+  <main class="reader-wrap" id="reader" hidden>
+    <div class="reader">
+      <aside class="r-side glass">
+        <div class="r-search">
+          <input type="search" id="convSearch" placeholder="Gespräche durchsuchen…" autocomplete="off">
+          <select id="convModelFilter" aria-label="Nach Modell filtern">
+            <option value="">Alle Modelle</option>
+          </select>
+          <div class="r-count" id="convCount"></div>
+          <div class="r-sort" id="convSort">
+            <button data-sort="date" class="active">Neueste</button>
+            <button data-sort="len">Längste</button>
+            <button data-sort="title">A–Z</button>
+          </div>
+        </div>
+        <div class="r-list" id="convList"></div>
+      </aside>
+      <div class="r-main glass">
+        <div class="r-head">
+          <h2 id="convTitle">Wähle ein Gespräch</h2>
+          <label class="r-toggle" title="Interne Gedankengänge der KI einblenden">
+            <input type="checkbox" id="showThinking"> Gedanken
+          </label>
+        </div>
+        <div class="r-body" id="convBody">
+          <div class="r-empty">
+            <div class="r-empty-icon">💬</div>
+            <p>Wähle links ein Gespräch aus,<br>um es wie einen Chatverlauf zu lesen.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="tooltip" id="tooltip" hidden></div>
+
+  <script src="js/parser.js"></script>
+  <script src="js/stats.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/markdown.js"></script>
+  <script src="js/demo.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

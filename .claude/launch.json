@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "chatgpt-stats",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "serve", "-n", "."],
+      "autoPort": true
+    }
+  ]
+}
