@@ -29,13 +29,22 @@ const Charts = (() => {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
+  // Math.max(1, ...arr) sprengt bei sehr großen Arrays den Call-Stack
+  function maxOf(arr, pick) {
+    let m = 0;
+    for (const v of arr) { const x = pick ? pick(v) : v; if (x > m) m = x; }
+    return m;
+  }
+
   /* Tooltip */
   function tooltip() {
     if (!tooltipEl) tooltipEl = document.getElementById("tooltip");
     return tooltipEl;
   }
+  let tipShownAtY = 0;
   function showTip(html, x, y) {
     const t = tooltip();
+    tipShownAtY = window.scrollY;
     t.innerHTML = html;
     t.hidden = false;
     const pad = 12;
@@ -47,6 +56,46 @@ const Charts = (() => {
     t.style.top = py + "px";
   }
   function hideTip() { tooltip().hidden = true; }
+
+  /* Tooltip an ein Element binden — Pointer-Events decken Maus UND Touch ab.
+     Auf Touch gibt es kein "leave", daher blendet ein Timer wieder aus. */
+  let tipHideTimer = null;
+  function bindTip(el, htmlAt, onLeave) {
+    const show = (e) => {
+      const html = htmlAt(e);
+      if (html) showTip(html, e.clientX, e.clientY);
+      if (e.pointerType === "touch") {
+        clearTimeout(tipHideTimer);
+        tipHideTimer = setTimeout(() => { hideTip(); if (onLeave) onLeave(); }, 2500);
+      }
+    };
+    el.setAttribute("data-tip", "");
+    el.addEventListener("pointermove", show);
+    el.addEventListener("pointerdown", show);
+    el.addEventListener("pointerleave", (e) => {
+      // Touch feuert pointerleave sofort nach dem Tap — dort räumt der Timer auf
+      if (e.pointerType === "touch") return;
+      hideTip();
+      if (onLeave) onLeave();
+    });
+  }
+  // Beim Scrollen oder Tippen außerhalb eines Charts ausblenden (Touch).
+  // Nur bei echter Positionsänderung — manche Browser feuern scroll-Events
+  // auch ohne Bewegung (z. B. Mobile-Emulation).
+  window.addEventListener("scroll", () => {
+    if (Math.abs(window.scrollY - tipShownAtY) > 6) hideTip();
+  }, { passive: true });
+  document.addEventListener("pointerdown", (e) => {
+    if (!(e.target instanceof Element) || !e.target.closest("[data-tip]")) hideTip();
+  }, true);
+
+  /* Barrierefreiheit: Container beschriften. SVG-only-Charts als Bild,
+     Charts mit lesbarem DOM-Text als Gruppe (Text bleibt zugänglich). */
+  function applyAria(el, opts, asImage) {
+    if (!opts.aria) return;
+    el.setAttribute("role", asImage ? "img" : "group");
+    el.setAttribute("aria-label", opts.aria);
+  }
 
   /* Registrierung: rendert sofort & bei Resize/Theme-Wechsel neu */
   function register(el, render) {
@@ -102,12 +151,13 @@ const Charts = (() => {
      opts = { series: [{name, color, values:number[]}], labels: string[],
               height, tipLabel(i) }                                    */
   function area(el, opts) {
+    applyAria(el, opts, true);
     register(el, () => {
       const height = opts.height || 260;
       const { svg, width } = makeSvg(el, height);
       const pad = { l: 46, r: 14, t: 14, b: 26 };
       const n = opts.labels.length;
-      const maxVal = Math.max(1, ...opts.series.flatMap(s => s.values)) * 1.12;
+      const maxVal = Math.max(1, maxOf(opts.series, s => maxOf(s.values))) * 1.12;
       const X = i => pad.l + (width - pad.l - pad.r) * (n <= 1 ? 0.5 : i / (n - 1));
       const Y = v => pad.t + (height - pad.t - pad.b) * (1 - v / maxVal);
 
@@ -160,7 +210,7 @@ const Charts = (() => {
         return c;
       });
 
-      svg.addEventListener("mousemove", (e) => {
+      bindTip(svg, (e) => {
         const rect = svg.getBoundingClientRect();
         const rel = (e.clientX - rect.left - pad.l) / (width - pad.l - pad.r);
         const i = Math.max(0, Math.min(n - 1, Math.round(rel * (n - 1))));
@@ -174,12 +224,10 @@ const Charts = (() => {
           dots[si].setAttribute("opacity", 1);
           rows += `<div class="tt-row"><span class="legend-dot" style="background:${s.color}"></span>${s.name}: <b>${fmtNum(s.values[i])}</b></div>`;
         });
-        showTip(`<div class="tt-title">${opts.tipLabel ? opts.tipLabel(i) : opts.labels[i]}</div>${rows}`, e.clientX, e.clientY);
-      });
-      svg.addEventListener("mouseleave", () => {
+        return `<div class="tt-title">${opts.tipLabel ? opts.tipLabel(i) : opts.labels[i]}</div>${rows}`;
+      }, () => {
         hoverLine.style.opacity = 0;
         dots.forEach(d => d.setAttribute("opacity", 0));
-        hideTip();
       });
 
       if (opts.series.length > 1) {
@@ -196,12 +244,13 @@ const Charts = (() => {
   /* ═════════ Balkendiagramm (vertikal) ═════════
      opts = { labels, values, color | colors, height, tipLabel(i) } */
   function bars(el, opts) {
+    applyAria(el, opts, true);
     register(el, () => {
       const height = opts.height || 230;
       const { svg, width } = makeSvg(el, height);
       const pad = { l: 46, r: 10, t: 12, b: 26 };
       const n = opts.values.length;
-      const maxVal = Math.max(1, ...opts.values) * 1.12;
+      const maxVal = Math.max(1, maxOf(opts.values)) * 1.12;
       const innerW = width - pad.l - pad.r;
       const bw = Math.min(38, innerW / n * 0.62);
       const X = i => pad.l + innerW * (i + 0.5) / n;
@@ -224,11 +273,10 @@ const Charts = (() => {
           r.setAttribute("height", Math.max(0, h));
         });
 
-        r.addEventListener("mousemove", (e) => {
+        bindTip(r, () => {
           r.style.opacity = 1;
-          showTip(`<div class="tt-title">${opts.tipLabel ? opts.tipLabel(i) : opts.labels[i]}</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`, e.clientX, e.clientY);
-        });
-        r.addEventListener("mouseleave", () => { r.style.opacity = .92; hideTip(); });
+          return `<div class="tt-title">${opts.tipLabel ? opts.tipLabel(i) : opts.labels[i]}</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`;
+        }, () => { r.style.opacity = .92; });
 
         if (i % labelStep === 0) {
           const t = svgEl("text", { x: X(i), y: height - 8, "text-anchor": "middle" });
@@ -242,13 +290,14 @@ const Charts = (() => {
   /* ═════════ Gestapelte Tages-Balken ═════════
      opts = { labels(dates), seriesLabels, data: [{values:[]}], colors, height } */
   function stackedBars(el, opts) {
+    applyAria(el, opts, true);
     register(el, () => {
       const height = opts.height || 250;
       const { svg, width } = makeSvg(el, height);
       const pad = { l: 46, r: 10, t: 12, b: 26 };
       const n = opts.data.length;
       const totals = opts.data.map(d => d.values.reduce((s, v) => s + v, 0));
-      const maxVal = Math.max(1, ...totals) * 1.1;
+      const maxVal = Math.max(1, maxOf(totals)) * 1.1;
       const innerW = width - pad.l - pad.r;
       const bw = Math.max(2, innerW / n * 0.7);
       const X = i => pad.l + innerW * (i + 0.5) / n;
@@ -279,15 +328,14 @@ const Charts = (() => {
           x: X(i) - innerW / n / 2, y: pad.t, width: innerW / n, height: height - pad.t - pad.b,
           fill: "transparent",
         });
-        zone.addEventListener("mousemove", (e) => {
+        bindTip(zone, () => {
           let rows = "";
           d.values.forEach((v, si) => {
             if (!v) return;
             rows += `<div class="tt-row"><span class="legend-dot" style="background:${opts.colors[si % opts.colors.length]}"></span>${opts.seriesLabels[si]}: <b>${fmtNum(v)}</b></div>`;
           });
-          showTip(`<div class="tt-title">${opts.tipLabel ? opts.tipLabel(i) : opts.labels[i]}</div>${rows || "<div class='tt-row'>keine Daten</div>"}`, e.clientX, e.clientY);
+          return `<div class="tt-title">${opts.tipLabel ? opts.tipLabel(i) : opts.labels[i]}</div>${rows || "<div class='tt-row'>keine Daten</div>"}`;
         });
-        zone.addEventListener("mouseleave", hideTip);
         svg.appendChild(zone);
 
         if (i % labelStep === 0) {
@@ -309,6 +357,7 @@ const Charts = (() => {
   /* ═════════ Donut ═════════
      opts = { items: [{label, value}], centerLabel, size } */
   function donut(el, opts) {
+    applyAria(el, opts, false);
     register(el, () => {
       el.innerHTML = "";
       const wrap = document.createElement("div");
@@ -343,10 +392,8 @@ const Charts = (() => {
           c.style.transition = `stroke-dasharray 1.2s cubic-bezier(.16,1,.3,1) ${idx * 90}ms`;
           c.setAttribute("stroke-dasharray", target);
         });
-        c.addEventListener("mousemove", (e) => {
-          showTip(`<div class="tt-title">${item.label}</div><div class="tt-row"><b>${fmtNum(item.value)}</b>&nbsp;(${(frac * 100).toFixed(1)} %)</div>`, e.clientX, e.clientY);
-        });
-        c.addEventListener("mouseleave", hideTip);
+        bindTip(c, () =>
+          `<div class="tt-title">${item.label}</div><div class="tt-row"><b>${fmtNum(item.value)}</b>&nbsp;(${(frac * 100).toFixed(1)} %)</div>`);
         offset += frac;
       });
 
@@ -373,12 +420,13 @@ const Charts = (() => {
   /* ═════════ Horizontales Balken-Ranking ═════════
      opts = { items: [{label, value, sub}], color | palette:true, valueFmt } */
   function hbars(el, opts) {
+    applyAria(el, opts, false);
     register(el, () => {
       el.innerHTML = "";
       const wrap = document.createElement("div");
       wrap.className = "hbars";
       el.appendChild(wrap);
-      const maxVal = Math.max(1, ...opts.items.map(i => i.value));
+      const maxVal = Math.max(1, maxOf(opts.items, i => i.value));
       opts.items.forEach((item, idx) => {
         const color = opts.palette ? PALETTE[idx % PALETTE.length] : (opts.color || PALETTE[0]);
         const row = document.createElement("div");
@@ -397,6 +445,7 @@ const Charts = (() => {
   /* ═════════ Heatmap Stunde × Wochentag ═════════
      opts = { heat: number[7][24], rowLabels } */
   function heatmap(el, opts) {
+    applyAria(el, opts, true);
     register(el, () => {
       el.innerHTML = "";
       const outer = document.createElement("div");
@@ -406,7 +455,7 @@ const Charts = (() => {
       outer.appendChild(grid);
       el.appendChild(outer);
 
-      const maxVal = Math.max(1, ...opts.heat.flat());
+      const maxVal = Math.max(1, maxOf(opts.heat, row => maxOf(row)));
       const base = cssVar("--blue") || "#0a84ff";
 
       // Kopfzeile (Stunden)
@@ -429,10 +478,8 @@ const Charts = (() => {
           const alpha = v === 0 ? 0 : 0.15 + 0.85 * Math.pow(v / maxVal, 0.6);
           if (v > 0) cell.style.background = `color-mix(in srgb, ${base} ${Math.round(alpha * 100)}%, transparent)`;
           cell.style.animationDelay = `${(ri * 24 + hi) * 3}ms`;
-          cell.addEventListener("mousemove", (e) => {
-            showTip(`<div class="tt-title">${opts.rowLabels[ri]}, ${hi}–${hi + 1} Uhr</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`, e.clientX, e.clientY);
-          });
-          cell.addEventListener("mouseleave", hideTip);
+          bindTip(cell, () =>
+            `<div class="tt-title">${opts.rowLabels[ri]}, ${hi}–${hi + 1} Uhr</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`);
           grid.appendChild(cell);
         });
       });
@@ -442,6 +489,7 @@ const Charts = (() => {
   /* ═════════ Kalender (GitHub-Style) ═════════
      opts = { perDay: [{date:"2026-05-21", msgs}], tipLabel(dateKey) } */
   function calendar(el, opts) {
+    applyAria(el, opts, true);
     register(el, () => {
       el.innerHTML = "";
       const outer = document.createElement("div");
@@ -449,7 +497,7 @@ const Charts = (() => {
       el.appendChild(outer);
 
       const byDate = new Map(opts.perDay.map(d => [d.date, d.msgs]));
-      const maxVal = Math.max(1, ...opts.perDay.map(d => d.msgs));
+      const maxVal = Math.max(1, maxOf(opts.perDay, d => d.msgs));
       const base = cssVar("--green") || "#30d158";
 
       const first = new Date(opts.perDay[0].date + "T12:00:00");
@@ -492,9 +540,8 @@ const Charts = (() => {
         if (inRange) {
           const label = new Date(key + "T12:00:00").toLocaleDateString("de-DE",
             { weekday: "short", day: "numeric", month: "long" });
-          cell.addEventListener("mousemove", (e) =>
-            showTip(`<div class="tt-title">${label}</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`, e.clientX, e.clientY));
-          cell.addEventListener("mouseleave", hideTip);
+          bindTip(cell, () =>
+            `<div class="tt-title">${label}</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`);
         }
         week.appendChild(cell);
         cursor.setDate(cursor.getDate() + 1);
@@ -507,12 +554,13 @@ const Charts = (() => {
   /* ═════════ Wortwolke ═════════
      opts = { words: [{key, value}] } */
   function wordcloud(el, opts) {
+    applyAria(el, opts, false);
     register(el, () => {
       el.innerHTML = "";
       const wrap = document.createElement("div");
       wrap.className = "wordcloud";
       el.appendChild(wrap);
-      const maxVal = Math.max(1, ...opts.words.map(w => w.value));
+      const maxVal = Math.max(1, maxOf(opts.words, w => w.value));
       // Größte Wörter in die Mitte mischen
       const shuffled = [...opts.words].sort((a, b) => (a.key.charCodeAt(0) * 31 + a.value) % 17 - (b.key.charCodeAt(0) * 31 + b.value) % 17);
       shuffled.forEach((w, i) => {

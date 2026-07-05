@@ -47,6 +47,10 @@ const Stats = (() => {
     return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
   }
 
+  // Math.min(...arr) sprengt bei sehr großen Exporten den Call-Stack
+  function arrMin(arr) { let m = Infinity; for (const v of arr) if (v < m) m = v; return m; }
+  function arrMax(arr) { let m = -Infinity; for (const v of arr) if (v > m) m = v; return m; }
+
   function topEntries(map, n) {
     return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n)
       .map(([key, value]) => ({ key, value }));
@@ -95,8 +99,8 @@ const Stats = (() => {
     const totalChars = visible.reduce((s, x) => s + x.m.chars, 0);
 
     const times = visible.map(x => x.m.t);
-    const firstT = Math.min(...times);
-    const lastT = Math.max(...times);
+    const firstT = arrMin(times);
+    const lastT = arrMax(times);
 
     // Allererste & allerletzte eigene Nachricht (inkl. Voice-Transkripte)
     let firstUser = null, lastUser = null;
@@ -208,8 +212,8 @@ const Stats = (() => {
       nightPct: nightMsgs / Math.max(1, visible.length) * 100,
       weekendPct: weekendMsgs / Math.max(1, visible.length) * 100,
       avgFirstMins, avgLastMins,
-      peakHour: perHour.indexOf(Math.max(...perHour)),
-      peakWeekday: WEEKDAYS[perWeekday.indexOf(Math.max(...perWeekday))],
+      peakHour: perHour.indexOf(arrMax(perHour)),
+      peakWeekday: WEEKDAYS[perWeekday.indexOf(arrMax(perWeekday))],
     };
 
     /* ── Modelle ───────────────────────────────────────── */
