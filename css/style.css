@@ -64,6 +64,17 @@ html[data-theme="light"] {
    (.landing, .nav-links) zuverlässig ausblenden */
 [hidden] { display: none !important; }
 
+/* Nur für Screenreader — visuell unsichtbar, aber vorlesbar */
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 html { scroll-behavior: smooth; scroll-padding-top: 76px; }
 
 body {
@@ -1000,6 +1011,15 @@ html[data-theme="light"] .bubble pre { background: rgba(0, 0, 0, .05); }
   .r-side { max-height: 320px; }
   .r-main { min-height: 60svh; }
   .msg { max-width: 94%; }
+}
+
+@media (max-width: 640px) {
+  /* Nav entschlacken, damit alle Aktionen nebeneinander passen */
+  .nav-inner { padding: 0 12px; gap: 10px; }
+  .nav-actions { gap: 7px; }
+  .nav-brand-text, .wrapped-btn-text, .demo-badge { display: none; }
+  .btn-ghost { padding: 7px 11px; font-size: 12px; }
+  .view-switch button { padding: 5px 11px; font-size: 12px; }
 }
 
 @media (max-width: 480px) {

@@ -208,19 +208,24 @@
         { name: "Nachrichten", color: Charts.PALETTE[0], values: a.perDay.map(d => d.msgs) },
         { name: "Neue Gespräche", color: Charts.PALETTE[2], values: a.perDay.map(d => d.convs) },
       ],
+      aria: `Liniendiagramm: Nachrichten und neue Gespräche pro Tag, Spitzenwert ${fmtInt(a.busiestDay.msgs)} Nachrichten am ${fmtDateKey(a.busiestDay.date, true)}`,
     });
     Charts.bars(chartCard(c, "Wochentage", "Nachrichten je Wochentag"), {
       labels: a.weekdayLabels, values: a.perWeekday, color: Charts.PALETTE[1], height: 210,
+      aria: `Balkendiagramm: Nachrichten je Wochentag, am meisten am ${a.peakWeekday}`,
     });
     Charts.bars(chartCard(c, "Uhrzeiten", "Nachrichten je Stunde"), {
       labels: [...Array(24).keys()].map(String), values: a.perHour, color: Charts.PALETTE[4], height: 210,
       tipLabel: (i) => i + "–" + (i + 1) + " Uhr",
+      aria: `Balkendiagramm: Nachrichten je Stunde, am meisten zwischen ${a.peakHour} und ${a.peakHour + 1} Uhr`,
     });
     Charts.heatmap(chartCard(c, "Aktivitäts-Heatmap", "Wochentag × Uhrzeit — wann du am meisten schreibst", true), {
       heat: a.heat, rowLabels: a.weekdayLabels,
+      aria: `Heatmap Wochentag mal Uhrzeit: aktivste Zeit ${a.peakWeekday} zwischen ${a.peakHour} und ${a.peakHour + 1} Uhr`,
     });
     Charts.calendar(chartCard(c, "Kalender", "jeder Tag ein Kästchen — je grüner, desto mehr Nachrichten", true), {
       perDay: a.perDay,
+      aria: `Aktivitätskalender: aktiv an ${fmtInt(S.overview.activeDays)} von ${fmtInt(S.overview.spanDays)} Tagen, aktivster Tag ${fmtDateKey(a.busiestDay.date, true)} mit ${fmtInt(a.busiestDay.msgs)} Nachrichten`,
     });
   }
 
@@ -237,10 +242,12 @@
     Charts.donut(chartCard(c, "Modell-Verteilung", "welches Modell deine Antworten geschrieben hat"), {
       items: m.dist.slice(0, 7).map(d => ({ label: d.label, value: d.count })),
       centerLabel: "Antworten",
+      aria: "Ringdiagramm: Verteilung der KI-Antworten nach Modell" + (m.dist[0] ? `, am häufigsten ${m.dist[0].label}` : ""),
     });
     Charts.hbars(chartCard(c, "Gewähltes Modell beim Start", "die Einstellung, mit der deine Gespräche begonnen haben"), {
       items: m.defaultDist.map(d => ({ label: d.label, value: d.count })),
       palette: true,
+      aria: "Ranking: gewähltes Modell beim Gesprächsstart",
     });
     Charts.stackedBars(chartCard(c, "Modellnutzung über Zeit", "KI-Antworten pro Tag, gestapelt nach Modell", true), {
       labels: m.perDaySeries.data.map(d => fmtDateKey(d.date)),
@@ -248,6 +255,7 @@
       seriesLabels: m.perDaySeries.labels,
       data: m.perDaySeries.data,
       colors: Charts.PALETTE,
+      aria: "Gestapeltes Balkendiagramm: KI-Antworten pro Tag nach Modell (" + m.perDaySeries.labels.join(", ") + ")",
     });
   }
 
@@ -268,6 +276,7 @@
       colors: [Charts.PALETTE[6], Charts.PALETTE[0], Charts.PALETTE[1], Charts.PALETTE[2], Charts.PALETTE[3], Charts.PALETTE[4]],
       height: 230,
       tipLabel: (i) => "Denkzeit " + r.buckets[i].label,
+      aria: `Balkendiagramm: Verteilung der Denkzeiten über ${fmtInt(r.recapCount)} Antworten, Median ${fmtDur(r.medianThinkSec)}`,
     });
   }
 
@@ -308,6 +317,7 @@
 
     Charts.wordcloud(chartCard(c, "Themen-Wolke", "häufigste Wörter deiner Gesprächstitel — Klick öffnet die Suche im Chat-Reader", true), {
       words: g.titleWords,
+      aria: "Wortwolke: häufigste Wörter deiner Gesprächstitel",
       onClick: (word) => {
         $("convSearch").value = word;
         showView("reader");
@@ -335,6 +345,7 @@
       Charts.donut(chartCard(c, "Anhang-Typen", "Dateiformate deiner Uploads"), {
         items: m.attTypes.map(t => ({ label: t.key, value: t.value })),
         centerLabel: "Dateien",
+        aria: "Ringdiagramm: Dateiformate deiner Anhänge",
       });
     }
     if (m.voices.length) {
@@ -342,6 +353,7 @@
         "Live-Voice-Gespräche je Stimme — Diktat im Textchat speichert der Export als normalen Text, es ist nicht als Audio erkennbar"), {
         items: m.voices.map(v => ({ label: cap(v.key), value: v.value })),
         palette: true,
+        aria: "Ranking: genutzte ChatGPT-Stimmen in Voice-Gesprächen",
       });
     }
   }
@@ -359,6 +371,7 @@
     Charts.hbars(chartCard(c, "Top-Domains", "die am häufigsten zitierten Quellen", true), {
       items: w.topDomains.map(d => ({ label: d.key, value: d.value })),
       color: Charts.PALETTE[0],
+      aria: "Ranking: am häufigsten zitierte Quellen-Domains" + (w.topDomains[0] ? `, Spitzenreiter ${w.topDomains[0].key}` : ""),
     });
 
     const REF_LABELS = {
@@ -373,6 +386,7 @@
     Charts.hbars(chartCard(c, "Verweis-Typen", "womit die KI ihre Antworten anreichert", true), {
       items: w.refTypes.map(r => ({ label: REF_LABELS[r.key] || r.key, value: r.value })),
       palette: true,
+      aria: "Ranking: Verweis-Typen in KI-Antworten",
     });
   }
 
@@ -390,6 +404,7 @@
     Charts.hbars(chartCard("charts-texte", "Deine Top-Wörter", "häufigste Wörter in deinen Prompts (ohne Füllwörter)", true), {
       items: t.topWords.map(w => ({ label: w.key, value: w.value })),
       color: Charts.PALETTE[2],
+      aria: "Ranking: häufigste Wörter in deinen Prompts" + (t.topWords[0] ? `, Platz 1: ${t.topWords[0].key}` : ""),
     });
 
     renderFunFacts(S);
@@ -697,6 +712,7 @@
     $("dashboard").hidden = false;
     $("navLinks").hidden = false;
     $("resetBtn").hidden = false;
+    $("wrappedBtn").hidden = false;
     $("viewSwitch").hidden = false;
     window.scrollTo({ top: 0, behavior: "instant" });
 
@@ -743,6 +759,7 @@
 
     $("analyzeBtn").addEventListener("click", analyze);
     $("resetBtn").addEventListener("click", () => location.reload());
+    $("wrappedBtn").addEventListener("click", () => Wrapped.openPicker(MODEL));
 
     // Demo-Modus: synthetischer Export durchläuft die normale Pipeline
     $("demoBtn").addEventListener("click", () => {
