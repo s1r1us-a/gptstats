@@ -138,8 +138,8 @@ const Wrapped = (() => {
         <div class="wr-big">${cnt(o.msgCount)}</div>
         <p class="wr-title">Nachrichten</p>
         <p class="wr-text">in ${fmtInt(o.convCount)} Gesprächen — ${fmtInt(ctx.newConvs)} davon hast
-        du in diesem Zeitraum neu gestartet. Zusammen habt ihr
-        <strong>${fmtInt(o.totalWords)} Wörter</strong> gewechselt.</p>`;
+        du in diesem Zeitraum neu gestartet. Dabei sind insgesamt
+        <strong>${fmtInt(o.totalWords)} Wörter</strong> zusammengekommen.</p>`;
       },
     },
     {
@@ -166,8 +166,8 @@ const Wrapped = (() => {
         <p class="wr-kicker">Nicht aufzuhalten</p>
         <div class="wr-big">🔥 ${cnt(ctx.S.activity.longestStreak)}</div>
         <p class="wr-title">Tage am Stück</p>
-        <p class="wr-text">Deine längste Serie ohne einen einzigen Tag Pause.
-        ChatGPT gehörte einfach dazu.</p>`,
+        <p class="wr-text">Deine längste Serie: jeden Tag mindestens eine Nachricht —
+        ohne einen einzigen Tag Pause.</p>`,
     },
     {
       id: "nachteule",
@@ -196,10 +196,10 @@ const Wrapped = (() => {
           ? `<p class="wr-text">${fmtPct(m.thinkingPct)} deiner Antworten kamen von
              Reasoning-Modellen — du magst es gründlich.</p>` : "";
         return `
-        <p class="wr-kicker">${ctx.month == null ? "Euer Jahr zusammen" : "Euer Monat zusammen"}</p>
+        <p class="wr-kicker">Dein meistgenutztes Modell</p>
         <h2 class="wr-title wr-grad">${esc(m.dist[0].label)}</h2>
-        <p class="wr-text">ist dein Modell ${ctx.month == null ? "des Jahres" : "des Monats"} —
-        es schrieb <strong>${fmtPct(share)}</strong> deiner KI-Antworten.</p>${think}`;
+        <p class="wr-text">hat die Hauptarbeit gemacht —
+        <strong>${fmtPct(share)}</strong> deiner KI-Antworten kamen von diesem Modell.</p>${think}`;
       },
     },
     {
