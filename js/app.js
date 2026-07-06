@@ -198,6 +198,10 @@
       { val: fmtClock(a.avgFirstMins), lbl: "Ø erste Nachricht", sub: "Tagesstart mit ChatGPT", accent: "green" },
       { val: fmtClock(a.avgLastMins), lbl: "Ø letzte Nachricht", sub: "so endet dein ChatGPT-Tag", accent: "blue" },
       { num: a.curStreak, fmt: (n) => fmtInt(n) + '<span class="unit">Tage</span>', lbl: "Serie am Ende des Exports", accent: "yellow" },
+      { num: a.recordHour.count, fmt: (n) => fmtInt(n) + '<span class="unit">Nachr.</span>', lbl: "Rekord-Stunde",
+        sub: a.recordHour.date ? `am ${fmtDateKey(a.recordHour.date, true)}, ${a.recordHour.hour}–${a.recordHour.hour + 1} Uhr` : "", accent: "pink" },
+      { num: a.recordConvsDay.count, lbl: "Meiste neue Gespräche an einem Tag",
+        sub: a.recordConvsDay.date ? "am " + fmtDateKey(a.recordConvsDay.date, true) : "", accent: "blue" },
     ]);
 
     const c = "charts-aktivitaet";
@@ -338,6 +342,16 @@
       { num: m.codeBlocksTotal, lbl: "Code-Blöcke", sub: `in ${fmtInt(m.codeMsgs)} Antworten · ${fmtInt(m.convsWithCode)} Gesprächen`, accent: "green" },
     ];
     if (m.imgAi.count) cards.splice(1, 0, { num: m.imgAi.count, lbl: "Bilder von der KI", sub: fmtBytes(m.imgAi.bytes), accent: "indigo" });
+    if (m.assetLib) {
+      if (m.assetLib.genImages) cards.push({
+        num: m.assetLib.genImages, lbl: "KI-Bilder gespeichert",
+        sub: "laut Dateinamen im Export", accent: "purple",
+      });
+      cards.push({
+        num: m.assetLib.total, lbl: "Dateien im Export-ZIP",
+        sub: "aus conversation_asset_file_names.json", accent: "yellow",
+      });
+    }
     fillGrid("grid-medien", cards);
 
     const c = "charts-medien";
@@ -354,6 +368,14 @@
         items: m.voices.map(v => ({ label: cap(v.key), value: v.value })),
         palette: true,
         aria: "Ranking: genutzte ChatGPT-Stimmen in Voice-Gesprächen",
+      });
+    }
+    if (m.assetLib) {
+      Charts.donut(chartCard(c, "Deine Datei-Bibliothek", "Original-Dateinamen aus dem Export-ZIP, nach Typ"), {
+        items: m.assetLib.categories.map(t => ({ label: t.key, value: t.value })),
+        centerLabel: "Dateien",
+        aria: "Ringdiagramm: Dateien im Export nach Typ" +
+          (m.assetLib.categories[0] ? `, am häufigsten ${m.assetLib.categories[0].key}` : ""),
       });
     }
   }

@@ -150,13 +150,17 @@ const Wrapped = (() => {
         const streakLine = a.longestStreak >= 3 ? "" :
           `<p class="wr-text">Insgesamt warst du an ${fmtInt(o.activeDays)} von
            ${fmtInt(ctx.periodDays)} Tagen aktiv.</p>`;
+        const recLine = a.recordHour && a.recordHour.count >= 3
+          ? `<p class="wr-text">Deine dichteste Stunde: <strong>${fmtInt(a.recordHour.count)}
+             Nachrichten</strong> am ${esc(fmtDateKey(a.recordHour.date))} zwischen
+             ${a.recordHour.hour} und ${a.recordHour.hour + 1} Uhr.</p>` : "";
         return `
         <p class="wr-kicker">Dein Rhythmus</p>
         <h2 class="wr-title">${esc(fmtDateKey(a.busiestDay.date))}</h2>
         <p class="wr-text">war dein aktivster Tag — <strong>${fmtInt(a.busiestDay.msgs)}
         Nachrichten</strong> an einem einzigen Tag.</p>
         <p class="wr-text">Deine Prime-Time: <strong>${esc(a.peakWeekday)},
-        ${a.peakHour}–${a.peakHour + 1} Uhr</strong>.</p>${streakLine}`;
+        ${a.peakHour}–${a.peakHour + 1} Uhr</strong>.</p>${recLine}${streakLine}`;
       },
     },
     {
@@ -254,18 +258,20 @@ const Wrapped = (() => {
       id: "medien",
       when: (ctx) => {
         const m = ctx.S.media;
-        return m.imgUser.count > 0 || m.spokenWordsUser > 0 || m.codeBlocksTotal > 0 || m.attCount > 0;
+        return m.imgUser.count > 0 || m.spokenWordsUser > 0 || m.codeBlocksTotal > 0 ||
+               m.attCount > 0 || (m.assetLib && m.assetLib.genImages > 0);
       },
       html: (ctx) => {
         const m = ctx.S.media;
         const rows = [];
+        if (m.assetLib && m.assetLib.genImages) rows.push(listRow("✨", `<strong>${fmtInt(m.assetLib.genImages)} KI-generierte Bilder</strong> gespeichert (gesamter Export)`));
         if (m.imgUser.count) rows.push(listRow("🖼️", `<strong>${fmtInt(m.imgUser.count)} Bilder</strong> hochgeladen`));
         if (m.spokenWordsUser) rows.push(listRow("🎙️", `<strong>${fmtInt(m.spokenWordsUser)} Wörter</strong> gesprochen — die KI antwortete mit ${fmtInt(m.spokenWordsAi)}`));
         if (m.codeBlocksTotal) rows.push(listRow("💻", `<strong>${fmtInt(m.codeBlocksTotal)} Code-Blöcke</strong> erhalten`));
         if (m.attCount) rows.push(listRow("📎", `<strong>${fmtInt(m.attCount)} Dateien</strong> angehängt`));
         return `
         <p class="wr-kicker">Mehr als nur Text</p>
-        <div class="wr-list">${rows.slice(0, 3).join("")}</div>`;
+        <div class="wr-list">${rows.slice(0, 4).join("")}</div>`;
       },
     },
     {

@@ -83,6 +83,26 @@ const Stats = (() => {
     return topEntries(freq, n);
   }
 
+  /* Original-Dateinamen aus conversation_asset_file_names.json kategorisieren.
+     Die Namen verraten Dinge, die sonst nirgends im Export stehen —
+     z. B. gespeicherte KI-generierte Bilder ("ChatGPT Image …"). */
+  function classifyAssets(assetNames) {
+    const names = assetNames ? Object.values(assetNames) : [];
+    if (!names.length) return null;
+    const cats = new Map();
+    let genImages = 0;
+    const add = (label) => cats.set(label, (cats.get(label) || 0) + 1);
+    for (const n of names) {
+      if (/^[0-9a-f-]{36}\/audio\//i.test(n)) add("Voice-Aufnahmen");
+      else if (/^ChatGPT Image/.test(n)) { genImages++; add("KI-generierte Bilder"); }
+      else if (/screenshot|bildschirm/i.test(n)) add("Screenshots");
+      else if (/\.(pdf|docx?|pptx?|xlsx?|md|txt|csv)$/i.test(n)) add("Dokumente");
+      else if (/\.(jpe?g|png|webp|gif|svg|heic)$/i.test(n)) add("Fotos & Bilder");
+      else add("Sonstiges");
+    }
+    return { total: names.length, genImages, categories: topEntries(cats, 8) };
+  }
+
   /* ═════════════ Hauptberechnung ═════════════ */
   function compute(model) {
     const convs = model.conversations;
@@ -158,12 +178,29 @@ const Stats = (() => {
     const perHour = new Array(24).fill(0);
     const perWeekday = new Array(7).fill(0);
     const heat = Array.from({ length: 7 }, () => new Array(24).fill(0));
+    const hourMap = new Map();   // "dateKey|hour" → Nachrichten in dieser Stunde
     for (const x of visible) {
       const d = new Date(x.m.t * 1000);
       perHour[d.getHours()]++;
       const wd = mondayIdx(x.m.t);
       perWeekday[wd]++;
       heat[wd][d.getHours()]++;
+      const hk = dateKey(x.m.t) + "|" + d.getHours();
+      hourMap.set(hk, (hourMap.get(hk) || 0) + 1);
+    }
+
+    // Rekord-Stunde: die meisten Nachrichten innerhalb einer Uhr-Stunde
+    let recordHour = { date: null, hour: 0, count: 0 };
+    for (const [k, v] of hourMap) {
+      if (v > recordHour.count) {
+        const sep = k.lastIndexOf("|");
+        recordHour = { date: k.slice(0, sep), hour: +k.slice(sep + 1), count: v };
+      }
+    }
+    // Rekord-Tag für neu gestartete Gespräche
+    let recordConvsDay = { date: null, count: 0 };
+    for (const [k, e] of perDayMap) {
+      if (e.convs > recordConvsDay.count) recordConvsDay = { date: k, count: e.convs };
     }
 
     let busiestDay = perDay[0];
@@ -209,6 +246,7 @@ const Stats = (() => {
       perDay, perHour, perWeekday, heat,
       weekdayLabels: WEEKDAYS,
       busiestDay, longestStreak, streakEnd, curStreak,
+      recordHour, recordConvsDay,
       nightPct: nightMsgs / Math.max(1, visible.length) * 100,
       weekendPct: weekendMsgs / Math.max(1, visible.length) * 100,
       avgFirstMins, avgLastMins,
@@ -367,6 +405,7 @@ const Stats = (() => {
       largestAtt,
       codeMsgs, codeBlocksTotal,
       convsWithCode: convsWithCode.size,
+      assetLib: classifyAssets(model.assetNames),
     };
 
     /* ── Websuche ──────────────────────────────────────── */
