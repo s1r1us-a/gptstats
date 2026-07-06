@@ -226,6 +226,34 @@ const Parser = (() => {
     return "unknown";
   }
 
+  /* Billige Vorschau für Datei-Chips & Zähler: gleiche Report-Texte wie
+     buildModel, aber ohne Normalisierung — dedupliziert nur die
+     Konversations-IDs gegen die bereits bekannten (knownIds). */
+  function preview(payloads, knownIds) {
+    const ids = new Set(knownIds);
+    const report = [];
+    for (const { name, data } of payloads) {
+      const kind = classify(data);
+      if (kind === "conversations") {
+        let added = 0;
+        for (const c of data) {
+          const id = c.conversation_id || c.id;
+          if (!ids.has(id)) { ids.add(id); added++; }
+        }
+        report.push({ name, ok: true, info: `${added} Konversationen` });
+      } else if (kind === "assets") {
+        report.push({ name, ok: true, info: `${Object.keys(data).length} Asset-Namen` });
+      } else if (kind === "user") {
+        report.push({ name, ok: true, info: "Konto-Infos" });
+      } else if (kind === "empty") {
+        report.push({ name, ok: true, info: "leer" });
+      } else {
+        report.push({ name, ok: false, info: "Format nicht erkannt" });
+      }
+    }
+    return { report, ids };
+  }
+
   /* payloads: [{name, data}] → {conversations:[…], assetNames:{}, userInfo, report:[…]} */
   function buildModel(payloads) {
     const byId = new Map();
@@ -286,5 +314,5 @@ const Parser = (() => {
     };
   }
 
-  return { readFiles, buildModel, cleanText, countWords, mimeLabel, parseRecapSeconds };
+  return { readFiles, preview, buildModel, cleanText, countWords, mimeLabel, parseRecapSeconds };
 })();
