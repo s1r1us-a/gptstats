@@ -680,7 +680,8 @@
 
   /* ── Daten laden ──────────────────────────────────────── */
 
-  const collected = [];   // gesammelte {name, data} Payloads
+  const collected = [];         // gesammelte {name, data} Payloads (nur bis zur Auswertung)
+  let stagedIds = new Set();    // bereits gesehene Konversations-IDs für Chips & Button
 
   function addFileChip(name, ok, info) {
     const li = document.createElement("li");
@@ -697,16 +698,17 @@
     for (const e of errors) addFileChip(e.name, false, e.error);
     if (skipped) addFileChip(`${skipped} Datei(en)`, false, "keine .json — übersprungen");
 
-    // Vorab klassifizieren, damit die Chips sofort Feedback geben
-    const probe = Parser.buildModel(payloads);
-    for (const rep of probe.report) addFileChip(rep.name, rep.ok, rep.info);
+    // Billige Vorschau für Chips & Button — die teure Normalisierung
+    // (buildModel) läuft erst einmalig beim Auswerten
+    const { report, ids } = Parser.preview(payloads, stagedIds);
+    for (const rep of report) addFileChip(rep.name, rep.ok, rep.info);
+    stagedIds = ids;
 
     collected.push(...payloads);
-    const model = Parser.buildModel(collected);
-    if (model.conversations.length > 0) {
+    if (stagedIds.size > 0) {
       const btn = $("analyzeBtn");
       btn.hidden = false;
-      btn.textContent = `${nf.format(model.conversations.length)} ${gespraeche(model.conversations.length)} auswerten →`;
+      btn.textContent = `${nf.format(stagedIds.size)} ${gespraeche(stagedIds.size)} auswerten →`;
     } else if (payloads.length) {
       showError("Keine Konversationen gefunden — bitte die conversations-*.json Dateien des ChatGPT-Exports wählen.");
     }
@@ -742,10 +744,17 @@
     // erzwingt Reflow) — kein rAF, das in Hintergrund-Tabs nie feuert.
     renderAll(S);
     setupReveal();
+
+    // Roh-JSON freigeben: nach der Auswertung nimmt die UI keine Dateien
+    // mehr an, das normalisierte MODEL reicht — halbiert den RAM-Bedarf
+    collected.length = 0;
+    stagedIds = new Set();
   }
 
   /* Programmatischer Einstieg (z. B. für Tests/Automatisierung):
-     window.ChatStats.ingestParsed([{name, data}]) */
+     window.ChatStats.ingestParsed([{name, data}])
+     Hinweis: nach einer erfolgreichen Auswertung startet jeder weitere
+     Aufruf frisch — die Roh-Payloads der vorigen Runde sind freigegeben. */
   window.ChatStats = {
     ingestParsed(payloads) {
       collected.push(...payloads);
@@ -786,6 +795,7 @@
     // Demo-Modus: synthetischer Export durchläuft die normale Pipeline
     $("demoBtn").addEventListener("click", () => {
       collected.length = 0;
+      stagedIds = new Set();
       $("demoBadge").hidden = false;
       window.ChatStats.ingestParsed([{ name: "demo-daten", data: Demo.generate() }]);
     });
