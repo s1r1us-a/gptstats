@@ -203,7 +203,8 @@ const Parser = (() => {
 
   /* ── Payload-Klassifizierung & Merge ──────────────────── */
 
-  // Ein geparstes JSON einordnen: Konversations-Array oder Asset-Namen-Map?
+  // Ein geparstes JSON einordnen: Konversations-Array, Asset-Namen-Map
+  // oder user.json (Konto-Infos)?
   function classify(data) {
     if (Array.isArray(data)) {
       if (data.length === 0) return "empty";
@@ -213,16 +214,23 @@ const Parser = (() => {
       return "unknown";
     }
     if (data && typeof data === "object") {
+      // user.json VOR der Asset-Map prüfen — sie besteht ebenfalls nur aus
+      // String-Werten und würde sonst als Asset-Namen fehlklassifiziert
+      if ("chatgpt_plus_user" in data || "email" in data ||
+          (typeof data.id === "string" && data.id.startsWith("user-"))) {
+        return "user";
+      }
       const keys = Object.keys(data);
       if (keys.length && keys.every(k => typeof data[k] === "string")) return "assets";
     }
     return "unknown";
   }
 
-  /* payloads: [{name, data}] → {conversations:[…], assetNames:{}, report:[…]} */
+  /* payloads: [{name, data}] → {conversations:[…], assetNames:{}, userInfo, report:[…]} */
   function buildModel(payloads) {
     const byId = new Map();
     const assetNames = {};
+    let userInfo = null;
     const report = [];
 
     for (const { name, data } of payloads) {
@@ -237,6 +245,9 @@ const Parser = (() => {
       } else if (kind === "assets") {
         Object.assign(assetNames, data);
         report.push({ name, ok: true, info: `${Object.keys(data).length} Asset-Namen` });
+      } else if (kind === "user") {
+        userInfo = data;
+        report.push({ name, ok: true, info: "Konto-Infos" });
       } else if (kind === "empty") {
         report.push({ name, ok: true, info: "leer" });
       } else {
@@ -245,7 +256,7 @@ const Parser = (() => {
     }
 
     const conversations = [...byId.values()].sort((a, b) => (a.createTime || 0) - (b.createTime || 0));
-    return { conversations, assetNames, report };
+    return { conversations, assetNames, userInfo, report };
   }
 
   /* ── Datei-Handling ───────────────────────────────────── */

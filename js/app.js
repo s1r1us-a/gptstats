@@ -184,6 +184,37 @@
       sub: `„${esc(snippet(o.lastMsg.text, 130))}“ — um ${msgTime(o.lastMsg)} Uhr`,
       accent: "pink", wide: true,
     });
+
+    // Konto/Plan: aus der (optionalen) user.json, sonst vorsichtige
+    // Heuristik über die genutzten Modelle
+    const u = MODEL ? MODEL.userInfo : null;
+    let planVal = null, planSub = null;
+    if (u) {
+      const explicit = ["plan_type", "subscription_plan", "plan", "account_plan"]
+        .map(k => u[k]).find(v => typeof v === "string" && v);
+      if (explicit) {
+        planVal = cap(explicit);
+        planSub = "laut user.json";
+      } else if (u.chatgpt_plus_user === true) {
+        planVal = "Bezahl-Abo";
+        planSub = "user.json meldet nur „zahlend: ja“ — der genaue Tarif (Go/Plus/Pro) steht nicht im Export";
+      } else if (u.chatgpt_plus_user === false) {
+        planVal = "Free";
+        planSub = "laut user.json";
+      }
+    }
+    if (!planVal && S.models.dist.some(d => /(^|-)pro($|-)/.test(d.slug))) {
+      planVal = "Pro (vermutet)";
+      planSub = "Pro-Modelle in deinen Antworten gefunden — der Export nennt den Tarif nicht direkt";
+    }
+    if (u || planVal) {
+      cards.push({
+        val: esc(planVal || "Nicht im Export"),
+        lbl: "Dein Plan",
+        sub: [u && u.email ? esc(u.email) : null, planSub].filter(Boolean).join(" · "),
+        accent: "teal", wide: true,
+      });
+    }
     fillGrid("grid-uebersicht", cards);
   }
 
