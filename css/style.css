@@ -282,10 +282,15 @@ html[data-theme="light"] .icon-moon { display: none; }
 
 .impact-block h3 {
   margin: 0 0 12px;
-  color: var(--text-dim);
   font-size: 15px;
   font-weight: 650;
   letter-spacing: 0;
+  background: var(--grad-hero);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  width: max-content;
+  max-width: 100%;
 }
 
 .impact-block .stat-grid { margin-bottom: 0; }
@@ -365,7 +370,13 @@ html[data-theme="light"] .icon-moon { display: none; }
 .section-head h2 {
   font-size: clamp(30px, 4.5vw, 44px);
   font-weight: 700;
-  letter-spacing: -.03em;
+  letter-spacing: 0;
+  background: var(--grad-hero);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  width: max-content;
+  max-width: 100%;
 }
 
 /* Hero */

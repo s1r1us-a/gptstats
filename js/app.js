@@ -49,11 +49,19 @@
     return nf2.format(n);
   }
 
-  function fmtShare(n, unit) {
-    if (!n) return "—";
-    if (n >= 1) return fmtCompare(n) + " " + unit;
-    return "1/" + fmtCompare(1 / n);
+  const nf3 = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+
+  function fmtFoodAmount(n) {
+    if (!n) return "0";
+    if (n >= 10) return fmtInt(n);
+    if (n >= 1) return nf1.format(n);
+    if (n >= 0.01) return nf2.format(n);
+    if (n >= 0.001) return nf3.format(n);
+    return "< 0,001";
   }
+
+  const impactFootprint = (I) => "Wasser: " + fmtWater(I.waterMl) + " · CO₂: " + fmtCo2(I.co2g);
+  const withFootprint = (I, s) => s + " · " + impactFootprint(I);
 
   function fmtDur(sec) {
     sec = Math.round(sec);
@@ -518,25 +526,36 @@
     const I = S.impact;
 
     fillGrid("grid-oeko", [
-      { num: I.waterMl, fmt: fmtWater, lbl: "Wasser verbraucht", sub: "≈ " + fmtCompare(I.bottles) + " Flaschen (0,5 L)", accent: "teal" },
-      { num: I.energyWh, fmt: fmtEnergy, lbl: "Strom verbraucht", sub: "≈ " + fmtCompare(I.phoneCharges) + " Handy-Ladungen", accent: "green" },
-      { num: I.co2g, fmt: fmtCo2, lbl: "CO₂ ausgestoßen", sub: "≈ " + fmtCompare(I.carKm) + " km mit dem Auto", accent: "blue" },
-      { num: I.weightedTokens, fmt: fmtInt, lbl: "gewichtete Text-Tokens", sub: "Prompt + Antwort + Kontext + Reasoning", accent: "indigo" },
+      { num: I.waterMl, fmt: fmtWater, lbl: "Wasser verbraucht", sub: "≈ " + fmtCompare(I.bottles) + " Flaschen (0,5 L) · CO₂: " + fmtCo2(I.co2g), accent: "teal" },
+      { num: I.energyWh, fmt: fmtEnergy, lbl: "Strom verbraucht", sub: withFootprint(I, "≈ " + fmtCompare(I.phoneCharges) + " Handy-Ladungen"), accent: "green" },
+      { num: I.co2g, fmt: fmtCo2, lbl: "CO₂ ausgestoßen", sub: "≈ " + fmtCompare(I.carKm) + " Pkw-km · Wasser: " + fmtWater(I.waterMl), accent: "blue" },
+      { num: I.weightedTokens, fmt: fmtInt, lbl: "gewichtete Text-Tokens", sub: withFootprint(I, "Prompt + Antwort + Kontext + Reasoning"), accent: "indigo" },
     ]);
 
     fillGrid("grid-oeko-vergleiche", [
-      { num: I.streamingHours, fmt: fmt1, lbl: "Std. Netflix-Streaming", sub: "IEA: ca. 0,077 kWh pro Stunde", accent: "pink" },
-      { num: I.ledHours, fmt: fmt1, lbl: "Std. LED-Lampe (10 W)", sub: "mit dieser Energie", accent: "yellow" },
-      { num: I.phoneCharges, fmt: fmtCompare, lbl: "Handy-Ladungen", sub: "grob 12 Wh pro Ladung", accent: "green" },
-      { num: I.avgQueryEquiv, fmt: fmtCompare, lbl: "Ø ChatGPT-Queries", sub: "Energie-Äquivalent nach 0,34 Wh/Query", accent: "purple" },
-      { num: I.evKm, fmt: fmt1, lbl: "km im E-Auto", sub: "mit dieser Energie", accent: "teal" },
-      { num: I.carKm, fmt: fmtCompare, lbl: "km Verbrenner", sub: "CO₂-Äquivalent bei 120 g/km", accent: "blue" },
+      { num: I.streamingHours, fmt: fmt1, lbl: "Std. Video-Streaming", sub: withFootprint(I, "IEA: ca. 0,077 kWh/h für Gerät, Netz & Rechenzentren"), accent: "pink" },
+      { num: I.ledHours, fmt: fmt1, lbl: "Std. LED-Lampe (10 W)", sub: withFootprint(I, "mit dieser Energie"), accent: "yellow" },
+      { num: I.phoneCharges, fmt: fmtCompare, lbl: "Handy-Ladungen", sub: withFootprint(I, "grob 12 Wh pro Ladung"), accent: "green" },
+      { num: I.avgQueryEquiv, fmt: fmtCompare, lbl: "Ø ChatGPT-Queries", sub: withFootprint(I, "Energie-Äquivalent nach 0,34 Wh/Query"), accent: "purple" },
+      { num: I.evKm, fmt: fmt1, lbl: "km im E-Auto", sub: withFootprint(I, "mit dieser Energie"), accent: "teal" },
+    ]);
+
+    fillGrid("grid-oeko-wasser", [
+      { num: I.showerMinutes, fmt: fmtCompare, lbl: "Dusch-Minuten", sub: withFootprint(I, "EPA: Standarddusche ≈ 9,5 L/min"), accent: "teal" },
+      { num: I.toiletFlushes, fmt: fmtCompare, lbl: "Toilettenspülungen", sub: withFootprint(I, "EPA WaterSense: ≈ 4,85 L/Spülung"), accent: "blue" },
+    ]);
+
+    fillGrid("grid-oeko-mobilitaet", [
+      { num: I.carKm, fmt: fmtCompare, lbl: "Pkw-km", sub: withFootprint(I, "UBA 2024: 164 g CO₂e/Pkm"), accent: "blue" },
+      { num: I.trainKm, fmt: fmtCompare, lbl: "Bahn-km Fernverkehr", sub: withFootprint(I, "UBA 2024: 26 g CO₂e/Pkm"), accent: "green" },
+      { num: I.flightKm, fmt: fmtCompare, lbl: "Inlandsflug-km", sub: withFootprint(I, "UBA 2024: 290 g CO₂e/Pkm"), accent: "purple" },
+      { num: I.pedelecKm, fmt: fmtCompare, lbl: "Pedelec-km", sub: withFootprint(I, "UBA 2024: 3 g CO₂e/Pkm"), accent: "yellow" },
     ]);
 
     fillGrid("grid-oeko-food", [
-      { val: fmtShare(I.steaks, "Steaks"), lbl: "Rindersteak-Wasser", sub: I.steakFits ? "1 Steak (200 g) ≈ 3.080 L · passt " + fmtCompare(I.steakFits) + "× hinein" : "1 Steak (200 g) ≈ 3.080 L", accent: "orange" },
-      { val: fmtShare(I.avocados, "Avocados"), lbl: "Avocado-Wasser", sub: I.avocadoFits ? "1 Avocado ≈ 320 L · passt " + fmtCompare(I.avocadoFits) + "× hinein" : "1 Avocado ≈ 320 L", accent: "green" },
-      { val: fmtShare(I.coffeeCups, "Tassen"), lbl: "Kaffee-Wasser", sub: I.coffeeFits ? "1 Tasse ≈ 132 L · passt " + fmtCompare(I.coffeeFits) + "× hinein" : "1 Tasse ≈ 132 L", accent: "yellow" },
+      { val: fmtFoodAmount(I.steaks) + " Steaks", lbl: "Rindersteak-Wasser", sub: withFootprint(I, "1 Steak (200 g) ≈ 3.080 L Wasser"), accent: "orange" },
+      { val: fmtFoodAmount(I.avocados) + " Avocados", lbl: "Avocado-Wasser", sub: withFootprint(I, "1 Avocado ≈ 320 L Wasser"), accent: "green" },
+      { val: fmtFoodAmount(I.coffeeCups) + " Tassen", lbl: "Kaffee-Wasser & CO₂", sub: withFootprint(I, "Äquiv.: Wasser " + fmtFoodAmount(I.coffeeCupsWater) + " · CO₂ " + fmtFoodAmount(I.coffeeCupsCo2) + " Tassen"), accent: "yellow" },
     ]);
 
     Charts.hbars(
