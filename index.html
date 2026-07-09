@@ -163,16 +163,27 @@
         <p class="section-eyebrow">Fußabdruck</p>
         <h2>Deine Umweltbilanz</h2>
       </div>
-      <div class="stat-grid" id="grid-oeko"></div>
+      <div class="impact-block">
+        <h3>Ressourcen</h3>
+        <div class="stat-grid" id="grid-oeko"></div>
+      </div>
+      <div class="impact-block">
+        <h3>Alltagsvergleiche</h3>
+        <div class="stat-grid" id="grid-oeko-vergleiche"></div>
+      </div>
+      <div class="impact-block">
+        <h3>Virtuelles Lebensmittelwasser</h3>
+        <div class="stat-grid" id="grid-oeko-food"></div>
+      </div>
       <div class="chart-grid" id="charts-oeko"></div>
       <p class="impact-note glass">
         <strong>Nur eine Schätzung.</strong> Der ChatGPT-Export enthält keine echten Mess­werte —
-        Wasser, Energie und CO₂ werden aus der geschätzten Token-Zahl, der Anzahl deiner Antworten
-        und dem jeweiligen Modell abgeleitet (Reasoning-Modelle zählen stärker). Grundlage:
-        ~0,34 Wh je Ø-Antwort (OpenAI/Epoch AI; arXiv&nbsp;2505.09598), Wasser­verbrauch pro Wh
-        (UC&nbsp;Riverside 2023) und Netz-CO₂. Lebensmittel-Vergleiche nach dem virtuellen
-        Wasser-Fußabdruck (Water Footprint Network). Die Wissenschaft nennt breite Spannen — sieh
-        die Zahlen als Größen­ordnung, nicht als exakte Bilanz.
+        Wasser, Energie und CO₂ werden aus sichtbaren Prompt- und Antwort-Tokens, einem kleinen
+        Kontextaufschlag und dem Modelltyp abgeleitet. Reasoning-Modelle zählen stärker; falls
+        Denkzeit-Marker im Export stehen, beeinflussen sie die Gewichtung. Grundlage: grobe
+        Text-Inferenzwerte um ~0,34 Wh je Ø-Query, Wasserverbrauch pro Wh und Netz-CO₂.
+        Lebensmittelkarten zeigen nur virtuelles Produktionswasser als Vergleich, nicht Wasser,
+        das durch ChatGPT verbraucht wurde.
       </p>
     </section>
 
