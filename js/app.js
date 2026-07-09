@@ -525,7 +525,7 @@
     fillGrid("grid-oeko", [
       { num: I.waterMl, fmt: fmtWater, lbl: "Wasser verbraucht", sub: "≈ " + fmtCompare(I.bottles) + " Flaschen (0,5 L)", accent: "teal" },
       { num: I.energyWh, fmt: fmtEnergy, lbl: "Strom verbraucht", sub: "≈ " + fmtCompare(I.phoneCharges) + " Handy-Ladungen", accent: "green" },
-      { num: I.co2g, fmt: fmtCo2, lbl: "CO₂ ausgestoßen", sub: "≈ " + fmtCompare(I.carKm) + " km mit dem Auto", accent: "blue" },
+      { num: I.co2g, fmt: fmtCo2, lbl: "CO₂ ausgestoßen", sub: "≈ " + fmtCompare(I.carKm) + " Pkw-km", accent: "blue" },
       { num: I.weightedTokens, fmt: fmtInt, lbl: "gewichtete Text-Tokens", sub: "Prompt + Antwort + Kontext + Reasoning", accent: "indigo" },
     ]);
 
@@ -535,7 +535,18 @@
       { num: I.phoneCharges, fmt: fmtCompare, lbl: "Handy-Ladungen", sub: "grob 12 Wh pro Ladung", accent: "green" },
       { num: I.avgQueryEquiv, fmt: fmtCompare, lbl: "Ø ChatGPT-Queries", sub: "Energie-Äquivalent nach 0,34 Wh/Query", accent: "purple" },
       { num: I.evKm, fmt: fmt1, lbl: "km im E-Auto", sub: "mit dieser Energie", accent: "teal" },
-      { num: I.carKm, fmt: fmtCompare, lbl: "km Verbrenner", sub: "CO₂-Äquivalent bei 120 g/km", accent: "blue" },
+    ]);
+
+    fillGrid("grid-oeko-wasser", [
+      { num: I.showerMinutes, fmt: fmtCompare, lbl: "Dusch-Minuten", sub: "EPA: Standarddusche ≈ 9,5 L/min", accent: "teal" },
+      { num: I.toiletFlushes, fmt: fmtCompare, lbl: "Toilettenspülungen", sub: "EPA WaterSense: ≈ 4,85 L/Spülung", accent: "blue" },
+    ]);
+
+    fillGrid("grid-oeko-mobilitaet", [
+      { num: I.carKm, fmt: fmtCompare, lbl: "Pkw-km", sub: "UBA 2024: 164 g CO₂e/Pkm", accent: "blue" },
+      { num: I.trainKm, fmt: fmtCompare, lbl: "Bahn-km Fernverkehr", sub: "UBA 2024: 26 g CO₂e/Pkm", accent: "green" },
+      { num: I.flightKm, fmt: fmtCompare, lbl: "Inlandsflug-km", sub: "UBA 2024: 290 g CO₂e/Pkm", accent: "purple" },
+      { num: I.pedelecKm, fmt: fmtCompare, lbl: "Pedelec-km", sub: "UBA 2024: 3 g CO₂e/Pkm", accent: "yellow" },
     ]);
 
     fillGrid("grid-oeko-food", [

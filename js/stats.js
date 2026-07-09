@@ -580,6 +580,12 @@ const Stats = (() => {
       CO2_G_COFFEE_CUP: 258,    // CDP: 12 oz schwarzer Kaffee ≈ 0,258 kg CO₂e
       AVG_CHATGPT_QUERY_WH: 0.34,
       STREAMING_VIDEO_WH_PER_HOUR: 77, // IEA: ~0,077 kWh je Stunde Streaming
+      SHOWER_L_PER_MIN: 9.46,    // EPA: Standard-Duschkopf 2,5 gal/min
+      TOILET_L_PER_FLUSH: 4.85,  // EPA WaterSense: 1,28 gal/Spülung
+      CO2_G_PER_PKM_CAR: 164,    // UBA 2024, Pkw gesamt
+      CO2_G_PER_PKM_TRAIN: 26,   // UBA 2024, Eisenbahn Fernverkehr
+      CO2_G_PER_PKM_FLIGHT: 290, // UBA 2024, Inlandflug inkl. Nicht-CO₂-Effekte
+      CO2_G_PER_PKM_PEDELEC: 3,  // UBA 2024, Pedelec
     };
 
     const energyMap = new Map();
@@ -667,7 +673,12 @@ const Stats = (() => {
       avgQueryEquiv: energyWh / IMPACT.AVG_CHATGPT_QUERY_WH,
       avgWhPerReply: energyWh / Math.max(1, measuredReplies),
       evKm: energyWh / 160,                          // ~160 Wh/km E-Auto
-      carKm: co2g / 120,                             // ~120 g CO₂/km Verbrenner
+      showerMinutes: waterL / IMPACT.SHOWER_L_PER_MIN,
+      toiletFlushes: waterL / IMPACT.TOILET_L_PER_FLUSH,
+      carKm: co2g / IMPACT.CO2_G_PER_PKM_CAR,
+      trainKm: co2g / IMPACT.CO2_G_PER_PKM_TRAIN,
+      flightKm: co2g / IMPACT.CO2_G_PER_PKM_FLIGHT,
+      pedelecKm: co2g / IMPACT.CO2_G_PER_PKM_PEDELEC,
     };
 
     return { overview, activity, models, reasoning, conversations, media, web, texts, fun, impact };
