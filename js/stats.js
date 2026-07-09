@@ -527,7 +527,65 @@ const Stats = (() => {
       longestSession, latestNight, longestBreak, busiestWeek,
     };
 
-    return { overview, activity, models, reasoning, conversations, media, web, texts, fun };
+    /* ── Ökobilanz (Umwelt-Fußabdruck) ─────────────────────
+       Der ChatGPT-Export enthält KEINE echten Token-/Energiewerte.
+       Wir schätzen daher über die Kette: geschätzte Tokens →
+       Energie → (Wasser & CO₂). Alle Faktoren sind belegt und hier
+       zentral als anpassbare Konstanten definiert.                */
+    const IMPACT = {
+      // Ø-Antwort ≈ 0,34 Wh (Altman 2025; Epoch AI; arXiv 2505.09598).
+      // Bei ~485 Output-Tokens ⇒ ~0,7 Wh je 1000 Tokens.
+      ENERGY_WH_PER_1K_TOKENS: 0.7,
+      // Reasoning-Modelle (o3, *-thinking) verbrauchen ein Vielfaches
+      // (arXiv 2505.09598: 18–33 Wh vs. <0,5 Wh).
+      REASONING_MULTIPLIER: 8,
+      // Kühlung on-site + Wasser der Stromerzeugung (UC Riverside 2023
+      // „Making AI Less Thirsty"; S. Goedecke). ~20 ml je Wh.
+      WATER_ML_PER_WH: 20,
+      // Ø Netz-Kohlenstoffintensität ~450 g CO₂/kWh.
+      CO2_G_PER_WH: 0.45,
+      // Virtuelles Wasser von Lebensmitteln (Water Footprint Network,
+      // Mekonnen & Hoekstra 2012), in Litern:
+      WATER_L_STEAK: 3080,      // 200 g Rind à 15.400 L/kg
+      WATER_L_AVOCADO: 320,     // 170 g à ~1.980 L/kg
+      WATER_L_COFFEE_CUP: 132,  // pro Tasse
+    };
+
+    const energyMap = new Map();
+    let energyWh = 0, reasoningEnergyWh = 0;
+    for (const x of aiMsgs) {
+      const outTokens = x.m.chars / 4;
+      const thinking = isThinkingModel(x.m.model);
+      const wh = (outTokens / 1000) * IMPACT.ENERGY_WH_PER_1K_TOKENS *
+        (thinking ? IMPACT.REASONING_MULTIPLIER : 1);
+      energyWh += wh;
+      if (thinking) reasoningEnergyWh += wh;
+      const slug = x.m.model || "unbekannt";
+      energyMap.set(slug, (energyMap.get(slug) || 0) + wh);
+    }
+    const energyByModel = topEntries(energyMap, 10)
+      .map(e => ({ label: prettyModel(e.key), wh: e.value }));
+
+    const waterMl = energyWh * IMPACT.WATER_ML_PER_WH;
+    const co2g = energyWh * IMPACT.CO2_G_PER_WH;
+    const waterL = waterMl / 1000;
+
+    const impact = {
+      energyWh, waterMl, co2g,
+      energyByModel,
+      reasoningEnergyPct: energyWh > 0 ? reasoningEnergyWh / energyWh * 100 : 0,
+      // greifbare Vergleiche
+      bottles: waterMl / 500,                        // 0,5-L-Flaschen
+      steaks: waterL / IMPACT.WATER_L_STEAK,
+      avocados: waterL / IMPACT.WATER_L_AVOCADO,
+      coffeeCups: waterL / IMPACT.WATER_L_COFFEE_CUP,
+      phoneCharges: energyWh / 12,                   // ~12 Wh je Smartphone-Ladung
+      ledHours: energyWh / 10,                       // 10-W-LED-Lampe
+      evKm: energyWh / 160,                          // ~160 Wh/km E-Auto
+      carKm: co2g / 120,                             // ~120 g CO₂/km Verbrenner
+    };
+
+    return { overview, activity, models, reasoning, conversations, media, web, texts, fun, impact };
   }
 
   return { compute, prettyModel, dateKey };
