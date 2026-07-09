@@ -577,6 +577,7 @@ const Stats = (() => {
       WATER_L_STEAK: 3080,      // 200 g Rind à 15.400 L/kg
       WATER_L_AVOCADO: 320,     // 170 g à ~1.980 L/kg
       WATER_L_COFFEE_CUP: 132,  // pro Tasse
+      CO2_G_COFFEE_CUP: 258,    // CDP: 12 oz schwarzer Kaffee ≈ 0,258 kg CO₂e
       AVG_CHATGPT_QUERY_WH: 0.34,
       STREAMING_VIDEO_WH_PER_HOUR: 77, // IEA: ~0,077 kWh je Stunde Streaming
     };
@@ -645,6 +646,8 @@ const Stats = (() => {
     const waterMl = energyWh * IMPACT.WATER_ML_PER_WH;
     const co2g = energyWh * IMPACT.CO2_G_PER_WH;
     const waterL = waterMl / 1000;
+    const coffeeCupsWater = waterL / IMPACT.WATER_L_COFFEE_CUP;
+    const coffeeCupsCo2 = co2g / IMPACT.CO2_G_COFFEE_CUP;
 
     const impact = {
       energyWh, waterMl, co2g,
@@ -655,10 +658,9 @@ const Stats = (() => {
       bottles: waterMl / 500,                        // 0,5-L-Flaschen
       steaks: waterL / IMPACT.WATER_L_STEAK,
       avocados: waterL / IMPACT.WATER_L_AVOCADO,
-      coffeeCups: waterL / IMPACT.WATER_L_COFFEE_CUP,
-      steakFits: waterL > 0 ? IMPACT.WATER_L_STEAK / waterL : 0,
-      avocadoFits: waterL > 0 ? IMPACT.WATER_L_AVOCADO / waterL : 0,
-      coffeeFits: waterL > 0 ? IMPACT.WATER_L_COFFEE_CUP / waterL : 0,
+      coffeeCups: Math.max(coffeeCupsWater, coffeeCupsCo2),
+      coffeeCupsWater,
+      coffeeCupsCo2,
       phoneCharges: energyWh / 12,                   // ~12 Wh je Smartphone-Ladung
       ledHours: energyWh / 10,                       // 10-W-LED-Lampe
       streamingHours: energyWh / IMPACT.STREAMING_VIDEO_WH_PER_HOUR,

@@ -49,10 +49,15 @@
     return nf2.format(n);
   }
 
-  function fmtShare(n, unit) {
-    if (!n) return "—";
-    if (n >= 1) return fmtCompare(n) + " " + unit;
-    return "1/" + fmtCompare(1 / n);
+  const nf3 = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+
+  function fmtFoodAmount(n) {
+    if (!n) return "0";
+    if (n >= 10) return fmtInt(n);
+    if (n >= 1) return nf1.format(n);
+    if (n >= 0.01) return nf2.format(n);
+    if (n >= 0.001) return nf3.format(n);
+    return "< 0,001";
   }
 
   function fmtDur(sec) {
@@ -534,9 +539,9 @@
     ]);
 
     fillGrid("grid-oeko-food", [
-      { val: fmtShare(I.steaks, "Steaks"), lbl: "Rindersteak-Wasser", sub: I.steakFits ? "1 Steak (200 g) ≈ 3.080 L · passt " + fmtCompare(I.steakFits) + "× hinein" : "1 Steak (200 g) ≈ 3.080 L", accent: "orange" },
-      { val: fmtShare(I.avocados, "Avocados"), lbl: "Avocado-Wasser", sub: I.avocadoFits ? "1 Avocado ≈ 320 L · passt " + fmtCompare(I.avocadoFits) + "× hinein" : "1 Avocado ≈ 320 L", accent: "green" },
-      { val: fmtShare(I.coffeeCups, "Tassen"), lbl: "Kaffee-Wasser", sub: I.coffeeFits ? "1 Tasse ≈ 132 L · passt " + fmtCompare(I.coffeeFits) + "× hinein" : "1 Tasse ≈ 132 L", accent: "yellow" },
+      { val: fmtFoodAmount(I.steaks) + " Steaks", lbl: "Rindersteak-Wasser", sub: "1 Steak (200 g) ≈ 3.080 L Wasser", accent: "orange" },
+      { val: fmtFoodAmount(I.avocados) + " Avocados", lbl: "Avocado-Wasser", sub: "1 Avocado ≈ 320 L Wasser", accent: "green" },
+      { val: fmtFoodAmount(I.coffeeCups) + " Tassen", lbl: "Kaffee-Wasser & CO₂", sub: "Wasser: " + fmtFoodAmount(I.coffeeCupsWater) + " · CO₂: " + fmtFoodAmount(I.coffeeCupsCo2) + " Tassen", accent: "yellow" },
     ]);
 
     Charts.hbars(
