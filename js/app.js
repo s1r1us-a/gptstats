@@ -49,6 +49,12 @@
     return nf2.format(n);
   }
 
+  function fmtShare(n, unit) {
+    if (!n) return "—";
+    if (n >= 1) return fmtCompare(n) + " " + unit;
+    return "1/" + fmtCompare(1 / n);
+  }
+
   function fmtDur(sec) {
     sec = Math.round(sec);
     if (sec >= 3600) return Math.floor(sec / 3600) + " h " + Math.round((sec % 3600) / 60) + " min";
@@ -511,24 +517,26 @@
   function renderImpact(S) {
     const I = S.impact;
 
-    // Lebensmittel-Vergleich: Der KI-Wasserverbrauch ist meist winzig
-    // gegenüber dem virtuellen Wasser eines Steaks (~3.080 L). Erreicht er
-    // kein ganzes Steak, drehen wir die Aussage um ("passt N× in 1 Steak") —
-    // das ist der eigentliche Aha-Effekt und vermeidet ein nichtssagendes „0".
-    const perSteak = I.steaks > 0 ? 1 / I.steaks : 0;
-    const foodCard = I.steaks >= 1
-      ? { val: fmtCompare(I.steaks) + " 🥩", lbl: "Rindersteaks (Wasser-Fußabdruck)",
-          sub: "≈ " + fmtCompare(I.avocados) + " Avocados · " + fmtCompare(I.coffeeCups) + " Tassen Kaffee", accent: "orange" }
-      : { val: fmtCompare(perSteak) + "×", lbl: "so oft passt deine KI-Wassernutzung in <strong>1 Rindersteak 🥩</strong>",
-          sub: "1 Steak (200 g) ≈ 3.080 L · 1 Avocado ≈ 320 L Wasser", accent: "orange" };
-
     fillGrid("grid-oeko", [
       { num: I.waterMl, fmt: fmtWater, lbl: "Wasser verbraucht", sub: "≈ " + fmtCompare(I.bottles) + " Flaschen (0,5 L)", accent: "teal" },
       { num: I.energyWh, fmt: fmtEnergy, lbl: "Strom verbraucht", sub: "≈ " + fmtCompare(I.phoneCharges) + " Handy-Ladungen", accent: "green" },
       { num: I.co2g, fmt: fmtCo2, lbl: "CO₂ ausgestoßen", sub: "≈ " + fmtCompare(I.carKm) + " km mit dem Auto", accent: "blue" },
-      foodCard,
+      { num: I.weightedTokens, fmt: fmtInt, lbl: "gewichtete Text-Tokens", sub: "Prompt + Antwort + Kontext + Reasoning", accent: "indigo" },
+    ]);
+
+    fillGrid("grid-oeko-vergleiche", [
+      { num: I.streamingHours, fmt: fmt1, lbl: "Std. Netflix-Streaming", sub: "IEA: ca. 0,077 kWh pro Stunde", accent: "pink" },
       { num: I.ledHours, fmt: fmt1, lbl: "Std. LED-Lampe (10 W)", sub: "mit dieser Energie", accent: "yellow" },
-      { num: I.evKm, fmt: fmt1, lbl: "km im E-Auto", sub: "mit dieser Energie", accent: "purple" },
+      { num: I.phoneCharges, fmt: fmtCompare, lbl: "Handy-Ladungen", sub: "grob 12 Wh pro Ladung", accent: "green" },
+      { num: I.avgQueryEquiv, fmt: fmtCompare, lbl: "Ø ChatGPT-Queries", sub: "Energie-Äquivalent nach 0,34 Wh/Query", accent: "purple" },
+      { num: I.evKm, fmt: fmt1, lbl: "km im E-Auto", sub: "mit dieser Energie", accent: "teal" },
+      { num: I.carKm, fmt: fmtCompare, lbl: "km Verbrenner", sub: "CO₂-Äquivalent bei 120 g/km", accent: "blue" },
+    ]);
+
+    fillGrid("grid-oeko-food", [
+      { val: fmtShare(I.steaks, "Steaks"), lbl: "Rindersteak-Wasser", sub: I.steakFits ? "1 Steak (200 g) ≈ 3.080 L · passt " + fmtCompare(I.steakFits) + "× hinein" : "1 Steak (200 g) ≈ 3.080 L", accent: "orange" },
+      { val: fmtShare(I.avocados, "Avocados"), lbl: "Avocado-Wasser", sub: I.avocadoFits ? "1 Avocado ≈ 320 L · passt " + fmtCompare(I.avocadoFits) + "× hinein" : "1 Avocado ≈ 320 L", accent: "green" },
+      { val: fmtShare(I.coffeeCups, "Tassen"), lbl: "Kaffee-Wasser", sub: I.coffeeFits ? "1 Tasse ≈ 132 L · passt " + fmtCompare(I.coffeeFits) + "× hinein" : "1 Tasse ≈ 132 L", accent: "yellow" },
     ]);
 
     Charts.hbars(
@@ -784,6 +792,8 @@
   function analyze() {
     const model = Parser.buildModel(collected);
     if (!model.conversations.length) { showError("Keine Konversationen gefunden."); return; }
+    const hasVisibleMessages = model.conversations.some(c => c.msgs.some(m => m.isVisible && m.t));
+    if (!hasVisibleMessages) { showError("Keine sichtbaren Nachrichten mit Zeitstempel gefunden."); return; }
 
     const S = Stats.compute(model);
     MODEL = model;

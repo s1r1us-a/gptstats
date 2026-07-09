@@ -278,6 +278,18 @@ html[data-theme="light"] .icon-moon { display: none; }
 }
 .impact-note strong { color: var(--text-dim); }
 
+.impact-block { margin-bottom: 26px; }
+
+.impact-block h3 {
+  margin: 0 0 12px;
+  color: var(--text-dim);
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.impact-block .stat-grid { margin-bottom: 0; }
+
 .dropzone {
   position: relative;
   padding: 52px 36px;

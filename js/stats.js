@@ -37,6 +37,29 @@ const Stats = (() => {
       String(d.getDate()).padStart(2, "0");
   }
 
+  function dateKeyNoonMs(key) {
+    return new Date(key + "T12:00:00").getTime();
+  }
+
+  function calendarSpanDays(firstT, lastT) {
+    if (firstT === null || lastT === null) return 0;
+    const first = dateKeyNoonMs(dateKey(firstT));
+    const last = dateKeyNoonMs(dateKey(lastT));
+    return Math.max(1, Math.round((last - first) / 86400e3) + 1);
+  }
+
+  function isoWeekLabel(t) {
+    const d = new Date(t * 1000);
+    const th = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    th.setDate(th.getDate() + 3 - ((d.getDay() + 6) % 7));
+    const isoYear = th.getFullYear();
+    const jan4 = new Date(isoYear, 0, 4);
+    const week1Thu = new Date(jan4);
+    week1Thu.setDate(jan4.getDate() + 3 - ((jan4.getDay() + 6) % 7));
+    const week = 1 + Math.round((th - week1Thu) / 7 / 86400e3);
+    return "KW " + week + "/" + isoYear;
+  }
+
   // JS getDay(): 0 = So → Mo-basierter Index (0 = Mo)
   const mondayIdx = (t) => (new Date(t * 1000).getDay() + 6) % 7;
 
@@ -55,6 +78,8 @@ const Stats = (() => {
     return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, n)
       .map(([key, value]) => ({ key, value }));
   }
+
+  const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 
   /* Modell-Slug → hübscher Name (gpt-5-5-thinking → GPT-5.5 Thinking) */
   function prettyModel(slug) {
@@ -119,8 +144,8 @@ const Stats = (() => {
     const totalChars = visible.reduce((s, x) => s + x.m.chars, 0);
 
     const times = visible.map(x => x.m.t);
-    const firstT = arrMin(times);
-    const lastT = arrMax(times);
+    const firstT = times.length ? arrMin(times) : null;
+    const lastT = times.length ? arrMax(times) : null;
 
     // Allererste & allerletzte eigene Nachricht (inkl. Voice-Transkripte)
     let firstUser = null, lastUser = null;
@@ -131,7 +156,7 @@ const Stats = (() => {
     const msgInfo = (x) => x ? { t: x.m.t, text: x.m.text, title: x.c.title } : null;
 
     const activeDaySet = new Set(visible.map(x => dateKey(x.m.t)));
-    const spanDays = Math.max(1, Math.round((lastT - firstT) / 86400) + 1);
+    const spanDays = calendarSpanDays(firstT, lastT);
 
     const overview = {
       convCount: convs.length,
@@ -166,13 +191,15 @@ const Stats = (() => {
     }
     // Lückenlose Tagesreihe von first bis last
     const perDay = [];
-    for (let d = new Date(firstT * 1000); ; d.setDate(d.getDate() + 1)) {
-      const k = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" +
-                String(d.getDate()).padStart(2, "0");
-      const e = perDayMap.get(k) || { msgs: 0, convs: 0 };
-      perDay.push({ date: k, msgs: e.msgs, convs: e.convs });
-      if (k === dateKey(lastT)) break;
-      if (perDay.length > 5000) break; // Sicherheitsnetz
+    if (firstT !== null && lastT !== null) {
+      for (let d = new Date(firstT * 1000); ; d.setDate(d.getDate() + 1)) {
+        const k = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" +
+                  String(d.getDate()).padStart(2, "0");
+        const e = perDayMap.get(k) || { msgs: 0, convs: 0 };
+        perDay.push({ date: k, msgs: e.msgs, convs: e.convs });
+        if (k === dateKey(lastT)) break;
+        if (perDay.length > 5000) break; // Sicherheitsnetz
+      }
     }
 
     const perHour = new Array(24).fill(0);
@@ -203,7 +230,7 @@ const Stats = (() => {
       if (e.convs > recordConvsDay.count) recordConvsDay = { date: k, count: e.convs };
     }
 
-    let busiestDay = perDay[0];
+    let busiestDay = perDay[0] || { date: null, msgs: 0, convs: 0 };
     for (const d of perDay) if (d.msgs > busiestDay.msgs) busiestDay = d;
 
     // Streaks über aktive Tage
@@ -511,12 +538,7 @@ const Stats = (() => {
     // Aktivste Kalenderwoche
     const weekMap = new Map();
     for (const x of visible) {
-      const d = new Date(x.m.t * 1000);
-      // ISO-Woche (Donnerstags-Trick)
-      const th = new Date(d); th.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
-      const jan1 = new Date(th.getFullYear(), 0, 1);
-      const kw = Math.ceil(((th - jan1) / 86400e3 + 1) / 7);
-      const key = "KW " + kw;
+      const key = isoWeekLabel(x.m.t);
       weekMap.set(key, (weekMap.get(key) || 0) + 1);
     }
     const busiestWeek = topEntries(weekMap, 1)[0] || null;
@@ -533,12 +555,18 @@ const Stats = (() => {
        Energie → (Wasser & CO₂). Alle Faktoren sind belegt und hier
        zentral als anpassbare Konstanten definiert.                */
     const IMPACT = {
-      // Ø-Antwort ≈ 0,34 Wh (Altman 2025; Epoch AI; arXiv 2505.09598).
-      // Bei ~485 Output-Tokens ⇒ ~0,7 Wh je 1000 Tokens.
+      // Ø-Query ≈ 0,34 Wh (Altman 2025). Bei ~485 sichtbaren Tokens
+      // ergibt das als grobe Text-Inferenz-Schätzung ~0,7 Wh je 1000 Tokens.
       ENERGY_WH_PER_1K_TOKENS: 0.7,
-      // Reasoning-Modelle (o3, *-thinking) verbrauchen ein Vielfaches
-      // (arXiv 2505.09598: 18–33 Wh vs. <0,5 Wh).
-      REASONING_MULTIPLIER: 8,
+      // Wiederverwendeter Gesprächskontext ist nicht im Export messbar.
+      // Wir zählen ihn klein gewichtet mit, statt ihn komplett zu ignorieren.
+      CONTEXT_REUSE_WEIGHT: 0.1,
+      CONTEXT_TOKEN_CAP: 16000,
+      // Reasoning-Modelle (o3, *-thinking) verbrauchen ein Vielfaches.
+      // Ohne echte Tokenwerte nutzen wir Denkzeit nur als begrenzten Proxy.
+      REASONING_DEFAULT_MULTIPLIER: 8,
+      REASONING_MIN_MULTIPLIER: 4,
+      REASONING_MAX_MULTIPLIER: 24,
       // Kühlung on-site + Wasser der Stromerzeugung (UC Riverside 2023
       // „Making AI Less Thirsty"; S. Goedecke). ~20 ml je Wh.
       WATER_ML_PER_WH: 20,
@@ -549,19 +577,67 @@ const Stats = (() => {
       WATER_L_STEAK: 3080,      // 200 g Rind à 15.400 L/kg
       WATER_L_AVOCADO: 320,     // 170 g à ~1.980 L/kg
       WATER_L_COFFEE_CUP: 132,  // pro Tasse
+      AVG_CHATGPT_QUERY_WH: 0.34,
+      STREAMING_VIDEO_WH_PER_HOUR: 77, // IEA: ~0,077 kWh je Stunde Streaming
     };
 
     const energyMap = new Map();
     let energyWh = 0, reasoningEnergyWh = 0;
-    for (const x of aiMsgs) {
-      const outTokens = x.m.chars / 4;
-      const thinking = isThinkingModel(x.m.model);
-      const wh = (outTokens / 1000) * IMPACT.ENERGY_WH_PER_1K_TOKENS *
-        (thinking ? IMPACT.REASONING_MULTIPLIER : 1);
-      energyWh += wh;
-      if (thinking) reasoningEnergyWh += wh;
-      const slug = x.m.model || "unbekannt";
-      energyMap.set(slug, (energyMap.get(slug) || 0) + wh);
+    let promptTokens = 0, outputTokens = 0, contextTokens = 0, weightedTokens = 0, measuredReplies = 0;
+    const tokenEstimate = (chars) => chars / 4;
+    const reasoningMultiplier = (sec) => {
+      if (sec === null || sec === undefined) return IMPACT.REASONING_DEFAULT_MULTIPLIER;
+      return clamp(
+        IMPACT.REASONING_MIN_MULTIPLIER + Math.sqrt(Math.max(0, sec)) * 1.6,
+        IMPACT.REASONING_MIN_MULTIPLIER,
+        IMPACT.REASONING_MAX_MULTIPLIER
+      );
+    };
+
+    for (const c of convs) {
+      let pendingPromptTokens = 0;
+      let visibleContextTokens = 0;
+      let lastRecapSec = null;
+      for (const m of c.msgs) {
+        if (m.ct === "reasoning_recap" && m.recap) {
+          lastRecapSec = m.recap.sec;
+          continue;
+        }
+        if (!m.isVisible || !m.t) continue;
+
+        const msgTokens = tokenEstimate(m.chars);
+        if (m.role === "user") {
+          pendingPromptTokens += msgTokens;
+          visibleContextTokens += msgTokens;
+          continue;
+        }
+        if (m.role !== "assistant") {
+          visibleContextTokens += msgTokens;
+          continue;
+        }
+
+        const outTokens = msgTokens;
+        const priorContextTokens = Math.max(0, visibleContextTokens - pendingPromptTokens);
+        const contextEstimate = Math.min(priorContextTokens, IMPACT.CONTEXT_TOKEN_CAP) * IMPACT.CONTEXT_REUSE_WEIGHT;
+        const thinking = isThinkingModel(m.model);
+        const multiplier = thinking ? reasoningMultiplier(lastRecapSec) : 1;
+        const countedTokens = pendingPromptTokens + outTokens + contextEstimate;
+        const wh = (countedTokens / 1000) * IMPACT.ENERGY_WH_PER_1K_TOKENS * multiplier;
+
+        energyWh += wh;
+        if (thinking) reasoningEnergyWh += wh;
+        promptTokens += pendingPromptTokens;
+        outputTokens += outTokens;
+        contextTokens += contextEstimate;
+        weightedTokens += countedTokens * multiplier;
+        measuredReplies++;
+
+        const slug = m.model || "unbekannt";
+        energyMap.set(slug, (energyMap.get(slug) || 0) + wh);
+        visibleContextTokens += outTokens;
+        pendingPromptTokens = 0;
+        lastRecapSec = null;
+      }
     }
     const energyByModel = topEntries(energyMap, 10)
       .map(e => ({ label: prettyModel(e.key), wh: e.value }));
@@ -572,6 +648,7 @@ const Stats = (() => {
 
     const impact = {
       energyWh, waterMl, co2g,
+      promptTokens, outputTokens, contextTokens, weightedTokens, measuredReplies,
       energyByModel,
       reasoningEnergyPct: energyWh > 0 ? reasoningEnergyWh / energyWh * 100 : 0,
       // greifbare Vergleiche
@@ -579,8 +656,14 @@ const Stats = (() => {
       steaks: waterL / IMPACT.WATER_L_STEAK,
       avocados: waterL / IMPACT.WATER_L_AVOCADO,
       coffeeCups: waterL / IMPACT.WATER_L_COFFEE_CUP,
+      steakFits: waterL > 0 ? IMPACT.WATER_L_STEAK / waterL : 0,
+      avocadoFits: waterL > 0 ? IMPACT.WATER_L_AVOCADO / waterL : 0,
+      coffeeFits: waterL > 0 ? IMPACT.WATER_L_COFFEE_CUP / waterL : 0,
       phoneCharges: energyWh / 12,                   // ~12 Wh je Smartphone-Ladung
       ledHours: energyWh / 10,                       // 10-W-LED-Lampe
+      streamingHours: energyWh / IMPACT.STREAMING_VIDEO_WH_PER_HOUR,
+      avgQueryEquiv: energyWh / IMPACT.AVG_CHATGPT_QUERY_WH,
+      avgWhPerReply: energyWh / Math.max(1, measuredReplies),
       evKm: energyWh / 160,                          // ~160 Wh/km E-Auto
       carKm: co2g / 120,                             // ~120 g CO₂/km Verbrenner
     };
