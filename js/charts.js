@@ -25,6 +25,10 @@ const Charts = (() => {
     return new Intl.NumberFormat("de-DE").format(Math.round(n));
   }
 
+  const esc = (s) => String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
   function cssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
@@ -222,9 +226,9 @@ const Charts = (() => {
           dots[si].setAttribute("cx", X(i));
           dots[si].setAttribute("cy", Y(s.values[i]));
           dots[si].setAttribute("opacity", 1);
-          rows += `<div class="tt-row"><span class="legend-dot" style="background:${s.color}"></span>${s.name}: <b>${fmtNum(s.values[i])}</b></div>`;
+          rows += `<div class="tt-row"><span class="legend-dot" style="background:${s.color}"></span>${esc(s.name)}: <b>${fmtNum(s.values[i])}</b></div>`;
         });
-        return `<div class="tt-title">${opts.tipLabel ? opts.tipLabel(i) : opts.labels[i]}</div>${rows}`;
+        return `<div class="tt-title">${esc(opts.tipLabel ? opts.tipLabel(i) : opts.labels[i])}</div>${rows}`;
       }, () => {
         hoverLine.style.opacity = 0;
         dots.forEach(d => d.setAttribute("opacity", 0));
@@ -234,7 +238,7 @@ const Charts = (() => {
         const legend = document.createElement("div");
         legend.className = "legend";
         for (const s of opts.series) {
-          legend.innerHTML += `<span class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${s.name}</span>`;
+          legend.innerHTML += `<span class="legend-item"><span class="legend-dot" style="background:${s.color}"></span>${esc(s.name)}</span>`;
         }
         el.appendChild(legend);
       }
@@ -275,7 +279,7 @@ const Charts = (() => {
 
         bindTip(r, () => {
           r.style.opacity = 1;
-          return `<div class="tt-title">${opts.tipLabel ? opts.tipLabel(i) : opts.labels[i]}</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`;
+          return `<div class="tt-title">${esc(opts.tipLabel ? opts.tipLabel(i) : opts.labels[i])}</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`;
         }, () => { r.style.opacity = .92; });
 
         if (i % labelStep === 0) {
@@ -332,9 +336,9 @@ const Charts = (() => {
           let rows = "";
           d.values.forEach((v, si) => {
             if (!v) return;
-            rows += `<div class="tt-row"><span class="legend-dot" style="background:${opts.colors[si % opts.colors.length]}"></span>${opts.seriesLabels[si]}: <b>${fmtNum(v)}</b></div>`;
+            rows += `<div class="tt-row"><span class="legend-dot" style="background:${opts.colors[si % opts.colors.length]}"></span>${esc(opts.seriesLabels[si])}: <b>${fmtNum(v)}</b></div>`;
           });
-          return `<div class="tt-title">${opts.tipLabel ? opts.tipLabel(i) : opts.labels[i]}</div>${rows || "<div class='tt-row'>keine Daten</div>"}`;
+          return `<div class="tt-title">${esc(opts.tipLabel ? opts.tipLabel(i) : opts.labels[i])}</div>${rows || "<div class='tt-row'>keine Daten</div>"}`;
         });
         svg.appendChild(zone);
 
@@ -348,7 +352,7 @@ const Charts = (() => {
       const legend = document.createElement("div");
       legend.className = "legend";
       opts.seriesLabels.forEach((s, si) => {
-        legend.innerHTML += `<span class="legend-item"><span class="legend-dot" style="background:${opts.colors[si % opts.colors.length]}"></span>${s}</span>`;
+        legend.innerHTML += `<span class="legend-item"><span class="legend-dot" style="background:${opts.colors[si % opts.colors.length]}"></span>${esc(s)}</span>`;
       });
       el.appendChild(legend);
     });
@@ -393,7 +397,7 @@ const Charts = (() => {
           c.setAttribute("stroke-dasharray", target);
         });
         bindTip(c, () =>
-          `<div class="tt-title">${item.label}</div><div class="tt-row"><b>${fmtNum(item.value)}</b>&nbsp;(${(frac * 100).toFixed(1)} %)</div>`);
+          `<div class="tt-title">${esc(item.label)}</div><div class="tt-row"><b>${fmtNum(item.value)}</b>&nbsp;(${(frac * 100).toFixed(1)} %)</div>`);
         offset += frac;
       });
 
@@ -410,7 +414,7 @@ const Charts = (() => {
         const pct = (item.value / total * 100).toFixed(1);
         const div = document.createElement("div");
         div.className = "legend-item";
-        div.innerHTML = `<span class="li-left"><span class="legend-dot" style="background:${PALETTE[idx % PALETTE.length]}"></span>${item.label}</span><span class="li-val">${pct}&thinsp;%</span>`;
+        div.innerHTML = `<span class="li-left"><span class="legend-dot" style="background:${PALETTE[idx % PALETTE.length]}"></span>${esc(item.label)}</span><span class="li-val">${pct}&thinsp;%</span>`;
         legend.appendChild(div);
       });
       wrap.appendChild(legend);
@@ -432,9 +436,9 @@ const Charts = (() => {
         const row = document.createElement("div");
         row.className = "hbar";
         row.innerHTML =
-          `<span class="hb-label" title="${item.label}">${item.label}</span>` +
+          `<span class="hb-label" title="${esc(item.label)}">${esc(item.label)}</span>` +
           `<span class="hb-track"><span class="hb-fill" style="background:${color}"></span></span>` +
-          `<span class="hb-val">${opts.valueFmt ? opts.valueFmt(item.value) : fmtNum(item.value)}${item.sub ? `<span class="hb-sub">${item.sub}</span>` : ""}</span>`;
+          `<span class="hb-val">${opts.valueFmt ? opts.valueFmt(item.value) : fmtNum(item.value)}${item.sub ? `<span class="hb-sub">${esc(item.sub)}</span>` : ""}</span>`;
         wrap.appendChild(row);
         const fill = row.querySelector(".hb-fill");
         setTimeout(() => { fill.style.width = (item.value / maxVal * 100) + "%"; }, 60 + idx * 55);
@@ -479,7 +483,7 @@ const Charts = (() => {
           if (v > 0) cell.style.background = `color-mix(in srgb, ${base} ${Math.round(alpha * 100)}%, transparent)`;
           cell.style.animationDelay = `${(ri * 24 + hi) * 3}ms`;
           bindTip(cell, () =>
-            `<div class="tt-title">${opts.rowLabels[ri]}, ${hi}–${hi + 1} Uhr</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`);
+            `<div class="tt-title">${esc(opts.rowLabels[ri])}, ${hi}–${hi + 1} Uhr</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`);
           grid.appendChild(cell);
         });
       });
@@ -541,7 +545,7 @@ const Charts = (() => {
           const label = new Date(key + "T12:00:00").toLocaleDateString("de-DE",
             { weekday: "short", day: "numeric", month: "long" });
           bindTip(cell, () =>
-            `<div class="tt-title">${label}</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`);
+            `<div class="tt-title">${esc(label)}</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`);
         }
         week.appendChild(cell);
         cursor.setDate(cursor.getDate() + 1);

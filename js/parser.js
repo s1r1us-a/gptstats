@@ -52,9 +52,12 @@ const Parser = (() => {
     if (!text) return null;
     const t = text.toLowerCase();
     let sec = 0, found = false;
-    const h = t.match(/(\d+)\s*h/);           if (h) { sec += +h[1] * 3600; found = true; }
-    const m = t.match(/(\d+)\s*m(?![a-z])/);  if (m) { sec += +m[1] * 60;   found = true; }
-    const s = t.match(/(\d+)\s*s(?:ek)?/);    if (s) { sec += +s[1];        found = true; }
+    const h = t.match(/(\d+)\s*(?:h|std|stunde|stunden|hour|hours)\b/);
+    if (h) { sec += +h[1] * 3600; found = true; }
+    const m = t.match(/(\d+)\s*(?:m|min|minute|minutes|minuten)\b/);
+    if (m) { sec += +m[1] * 60; found = true; }
+    const s = t.match(/(\d+)\s*(?:s|sek|sekunde|sekunden|second|seconds)\b/);
+    if (s) { sec += +s[1]; found = true; }
     if (found) return { sec, estimated: false };
     // Textvarianten (DE + EN) → grobe Schätzwerte
     if (/eine sekunde|a second/.test(t))                 return { sec: 1, estimated: true };
@@ -179,14 +182,41 @@ const Parser = (() => {
   }
 
   /* ── Eine Konversation normalisieren ──────────────────── */
+  function selectedMappingNodes(c) {
+    if (!c.mapping) return { nodes: [], isFinalPath: false };
+    const nodes = [];
+    const seen = new Set();
+    let id = c.current_node;
+
+    while (id && c.mapping[id] && !seen.has(id)) {
+      seen.add(id);
+      nodes.push(c.mapping[id]);
+      id = c.mapping[id].parent;
+    }
+
+    // Manche alten oder synthetischen Exporte haben keinen brauchbaren
+    // current_node. Dann lieber bisheriges Verhalten statt leere Chats.
+    const finalNodes = nodes.reverse();
+    if (!finalNodes.some(node => node && node.message)) {
+      return { nodes: Object.values(c.mapping), isFinalPath: false };
+    }
+    return { nodes: finalNodes, isFinalPath: true };
+  }
+
   function normalizeConversation(c) {
     const msgs = [];
+    let isFinalPath = false;
     if (c.mapping) {
-      for (const node of Object.values(c.mapping)) {
+      const selected = selectedMappingNodes(c);
+      isFinalPath = selected.isFinalPath;
+      for (const node of selected.nodes) {
         if (node && node.message) msgs.push(normalizeMessage(node.message));
       }
     }
-    msgs.sort((a, b) => (a.t || 0) - (b.t || 0));
+    const totalMessageNodes = c.mapping
+      ? Object.values(c.mapping).filter(node => node && node.message).length
+      : msgs.length;
+    if (!isFinalPath) msgs.sort((a, b) => (a.t || 0) - (b.t || 0));
     return {
       id: c.conversation_id || c.id,
       title: c.title || "Ohne Titel",
@@ -197,6 +227,7 @@ const Parser = (() => {
       templateId: c.conversation_template_id || null,
       isArchived: !!c.is_archived,
       isStarred: !!c.is_starred,
+      skippedAltMsgs: Math.max(0, totalMessageNodes - msgs.length),
       msgs,
     };
   }
