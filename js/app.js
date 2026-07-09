@@ -279,7 +279,7 @@
     fillGrid("grid-modelle", [
       { num: m.distinctCount, lbl: "Verschiedene Modelle", accent: "blue" },
       { num: m.thinkingPct, fmt: fmtPct, lbl: "Thinking-Anteil", sub: "Antworten von Reasoning-Modellen", accent: "purple" },
-      { val: m.dist[0] ? m.dist[0].label : "—", lbl: "Meistgenutztes Modell", sub: m.dist[0] ? fmtInt(m.dist[0].count) + " Antworten" : "", accent: "pink" },
+      { val: m.dist[0] ? esc(m.dist[0].label) : "—", lbl: "Meistgenutztes Modell", sub: m.dist[0] ? fmtInt(m.dist[0].count) + " Antworten" : "", accent: "pink" },
       { num: m.autoStartPct, fmt: fmtPct, lbl: "Start im Auto-Modus", sub: "du lässt ChatGPT das Modell wählen", accent: "teal" },
     ]);
 
@@ -526,9 +526,9 @@
     const I = S.impact;
 
     fillGrid("grid-oeko", [
-      { num: I.waterMl, fmt: fmtWater, lbl: "Wasser verbraucht", sub: "≈ " + fmtCompare(I.bottles) + " Flaschen (0,5 L) · CO₂: " + fmtCo2(I.co2g), accent: "teal" },
+      { num: I.waterMl, fmt: fmtWater, lbl: "Wasser verbraucht", sub: "Spanne: " + fmtWater(I.waterMlLow) + "–" + fmtWater(I.waterMlHigh) + " · CO₂: " + fmtCo2(I.co2g), accent: "teal" },
       { num: I.energyWh, fmt: fmtEnergy, lbl: "Strom verbraucht", sub: withFootprint(I, "≈ " + fmtCompare(I.phoneCharges) + " Handy-Ladungen"), accent: "green" },
-      { num: I.co2g, fmt: fmtCo2, lbl: "CO₂ ausgestoßen", sub: "≈ " + fmtCompare(I.carKm) + " Pkw-km · Wasser: " + fmtWater(I.waterMl), accent: "blue" },
+      { num: I.co2g, fmt: fmtCo2, lbl: "CO₂ ausgestoßen", sub: "globaler Mix · DE 2025: " + fmtCo2(I.co2gGermany), accent: "blue" },
       { num: I.weightedTokens, fmt: fmtInt, lbl: "gewichtete Text-Tokens", sub: withFootprint(I, "Prompt + Antwort + Kontext + Reasoning"), accent: "indigo" },
     ]);
 
@@ -726,7 +726,10 @@
     let searchTimer;
     $("convSearch").addEventListener("input", () => {
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(renderConvList, 200);
+      searchTimer = setTimeout(() => {
+        renderConvList();
+        if (reader.selected) openConversation(reader.selected);
+      }, 200);
     });
     $("convModelFilter").addEventListener("change", renderConvList);
     document.querySelectorAll("#convSort button").forEach(b => b.addEventListener("click", () => {

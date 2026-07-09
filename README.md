@@ -62,11 +62,27 @@ Optional kann zusätzlich die `conversation_asset_file_names.json` mitgeladen we
 
 Kein Build-Schritt, keine Dependencies — einfach klonen und `index.html` öffnen.
 
+## Entwicklung
+
+```bash
+node tests/regression.js
+```
+
 ## Hinweise
 
-- Die Auswertung basiert auf **allen Nachrichten im Export** (inkl. Voice-Transkripten und Medien-Nachrichten). Andere Analyzer zählen teils nur den finalen Gesprächspfad oder verwerfen textlose Nachrichten — die Zahlen können daher abweichen.
+- Die Auswertung basiert auf dem **finalen sichtbaren Gesprächspfad** (`current_node`) im Export. Verworfene oder regenerierte Antwort-Alternativen werden nicht mitgezählt.
 - Diktat (Speech-to-Text im Textchat) speichert der Export als normalen Text — es ist nicht von getippten Nachrichten unterscheidbar. Der Live-Voice-Modus dagegen schon.
 - Denkzeiten werden aus den „Nachgedacht für …"-Angaben geparst; Textangaben wie „ein paar Sekunden" werden konservativ geschätzt.
+- Die Umweltbilanz ist eine Schätzung. Energie, Wasser und CO₂ werden aus sichtbaren Prompt-/Antwort-Tokens, Kontextaufschlag und Modelltyp abgeleitet; echte Messwerte enthält der Export nicht.
+
+### Quellen für Umweltfaktoren
+
+- ChatGPT-Ø-Query: [Sam Altman, 2025](https://blog.samaltman.com/the-gentle-singularity) — ca. 0,34 Wh und 0,000085 gal Wasser pro durchschnittlicher Query.
+- Strommix global: [IEA Electricity 2025](https://www.iea.org/reports/electricity-2025/emissions) — ca. 445 g CO₂/kWh für 2024.
+- Strommix Deutschland: [Umweltbundesamt, 2025](https://www.umweltbundesamt.de/themen/co2-emissionen-pro-kilowattstunde-strom-2025-nur) — 344 g CO₂/kWh.
+- Wasser-Spanne: [OECD.AI](https://oecd.ai/en/wonk/how-much-water-does-ai-consume) / [„Making AI Less Thirsty"](https://arxiv.org/abs/2304.03271) — standortabhängige KI-Wassernutzung von etwa 1,8–12 L/kWh; die sehr niedrige Vergleichsgrenze leitet sich aus Altmans Ø-Query-Wasserangabe ab.
+- Alltag/Wasser: [EPA WaterSense Showerheads](https://www.epa.gov/watersense/showerheads) und [Residential Toilets](https://www.epa.gov/watersense/residential-toilets) — Standarddusche 2,5 gal/min; WaterSense-Toiletten 1,28 gal/Spülung.
+- Lebensmittelwasser: [Water Footprint Network](https://www.waterfootprint.org/resources/interactive-tools/product-gallery/) / [University of Twente](https://research.utwente.nl/en/publications/the-green-blue-and-grey-water-footprint-of-animals-and-animal-pro/) — u. a. Rindfleisch 15.400 m³/t.
 
 ## Lizenz
 

@@ -567,11 +567,16 @@ const Stats = (() => {
       REASONING_DEFAULT_MULTIPLIER: 8,
       REASONING_MIN_MULTIPLIER: 4,
       REASONING_MAX_MULTIPLIER: 24,
-      // Kühlung on-site + Wasser der Stromerzeugung (UC Riverside 2023
-      // „Making AI Less Thirsty"; S. Goedecke). ~20 ml je Wh.
-      WATER_ML_PER_WH: 20,
-      // Ø Netz-Kohlenstoffintensität ~450 g CO₂/kWh.
-      CO2_G_PER_WH: 0.45,
+      // Wasser hängt stark vom Standort ab. Der Mittelwert nutzt die Mitte
+      // der OECD-Spanne 1,8–12 L/kWh; Altman nennt für Ø-Queries 0,000085 gal
+      // Wasser bei 0,34 Wh, also ~0,95 L/kWh als sehr niedrigen Vergleich.
+      WATER_ML_PER_WH: 6.9,
+      WATER_ML_PER_WH_LOW: 0.95,
+      WATER_ML_PER_WH_HIGH: 12,
+      // Strommix: IEA global 2024 ~445 g CO₂/kWh; UBA Deutschland 2025
+      // ~344 g CO₂/kWh. Wir zeigen global als Default und DE als Vergleich.
+      CO2_G_PER_WH: 0.445,
+      CO2_G_PER_WH_DE_2025: 0.344,
       // Virtuelles Wasser von Lebensmitteln (Water Footprint Network,
       // Mekonnen & Hoekstra 2012), in Litern:
       WATER_L_STEAK: 3080,      // 200 g Rind à 15.400 L/kg
@@ -650,13 +655,16 @@ const Stats = (() => {
       .map(e => ({ label: prettyModel(e.key), wh: e.value }));
 
     const waterMl = energyWh * IMPACT.WATER_ML_PER_WH;
+    const waterMlLow = energyWh * IMPACT.WATER_ML_PER_WH_LOW;
+    const waterMlHigh = energyWh * IMPACT.WATER_ML_PER_WH_HIGH;
     const co2g = energyWh * IMPACT.CO2_G_PER_WH;
+    const co2gGermany = energyWh * IMPACT.CO2_G_PER_WH_DE_2025;
     const waterL = waterMl / 1000;
     const coffeeCupsWater = waterL / IMPACT.WATER_L_COFFEE_CUP;
     const coffeeCupsCo2 = co2g / IMPACT.CO2_G_COFFEE_CUP;
 
     const impact = {
-      energyWh, waterMl, co2g,
+      energyWh, waterMl, waterMlLow, waterMlHigh, co2g, co2gGermany,
       promptTokens, outputTokens, contextTokens, weightedTokens, measuredReplies,
       energyByModel,
       reasoningEnergyPct: energyWh > 0 ? reasoningEnergyWh / energyWh * 100 : 0,
