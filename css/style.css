@@ -269,6 +269,15 @@ html[data-theme="light"] .icon-moon { display: none; }
   border-radius: var(--radius);
 }
 
+.impact-note {
+  margin-top: 18px;
+  padding: 16px 20px;
+  color: var(--text-faint);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.impact-note strong { color: var(--text-dim); }
+
 .dropzone {
   position: relative;
   padding: 52px 36px;

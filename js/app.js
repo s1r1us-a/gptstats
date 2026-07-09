@@ -23,6 +23,32 @@
     return fmtInt(b) + " B";
   }
 
+  const nf2 = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
+
+  function fmtWater(ml) {
+    if (ml >= 1e6) return nf1.format(ml / 1e6) + " m³";
+    if (ml >= 1000) return nf1.format(ml / 1000) + " L";
+    return fmtInt(ml) + " ml";
+  }
+
+  function fmtEnergy(wh) {
+    if (wh >= 1000) return nf1.format(wh / 1000) + " kWh";
+    return nf1.format(wh) + " Wh";
+  }
+
+  function fmtCo2(g) {
+    if (g >= 1000) return nf1.format(g / 1000) + " kg";
+    return nf1.format(g) + " g";
+  }
+
+  // Vergleichszahl möglichst gut lesbar: große Werte ganzzahlig,
+  // kleine mit ein bis zwei Nachkommastellen.
+  function fmtCompare(n) {
+    if (n >= 10) return fmtInt(n);
+    if (n >= 1) return nf1.format(n);
+    return nf2.format(n);
+  }
+
   function fmtDur(sec) {
     sec = Math.round(sec);
     if (sec >= 3600) return Math.floor(sec / 3600) + " h " + Math.round((sec % 3600) / 60) + " min";
@@ -132,6 +158,7 @@
     renderMedia(S);
     renderWeb(S);
     renderTexts(S);
+    renderImpact(S);
   }
 
   function renderHero(S) {
@@ -479,6 +506,40 @@
     ff.innerHTML = facts.map(x =>
       `<div class="funfact"><span class="ff-emoji">${x.e}</span><span class="ff-text">${x.h}</span></div>`
     ).join("");
+  }
+
+  function renderImpact(S) {
+    const I = S.impact;
+
+    // Lebensmittel-Vergleich: Der KI-Wasserverbrauch ist meist winzig
+    // gegenüber dem virtuellen Wasser eines Steaks (~3.080 L). Erreicht er
+    // kein ganzes Steak, drehen wir die Aussage um ("passt N× in 1 Steak") —
+    // das ist der eigentliche Aha-Effekt und vermeidet ein nichtssagendes „0".
+    const perSteak = I.steaks > 0 ? 1 / I.steaks : 0;
+    const foodCard = I.steaks >= 1
+      ? { val: fmtCompare(I.steaks) + " 🥩", lbl: "Rindersteaks (Wasser-Fußabdruck)",
+          sub: "≈ " + fmtCompare(I.avocados) + " Avocados · " + fmtCompare(I.coffeeCups) + " Tassen Kaffee", accent: "orange" }
+      : { val: fmtCompare(perSteak) + "×", lbl: "so oft passt deine KI-Wassernutzung in <strong>1 Rindersteak 🥩</strong>",
+          sub: "1 Steak (200 g) ≈ 3.080 L · 1 Avocado ≈ 320 L Wasser", accent: "orange" };
+
+    fillGrid("grid-oeko", [
+      { num: I.waterMl, fmt: fmtWater, lbl: "Wasser verbraucht", sub: "≈ " + fmtCompare(I.bottles) + " Flaschen (0,5 L)", accent: "teal" },
+      { num: I.energyWh, fmt: fmtEnergy, lbl: "Strom verbraucht", sub: "≈ " + fmtCompare(I.phoneCharges) + " Handy-Ladungen", accent: "green" },
+      { num: I.co2g, fmt: fmtCo2, lbl: "CO₂ ausgestoßen", sub: "≈ " + fmtCompare(I.carKm) + " km mit dem Auto", accent: "blue" },
+      foodCard,
+      { num: I.ledHours, fmt: fmt1, lbl: "Std. LED-Lampe (10 W)", sub: "mit dieser Energie", accent: "yellow" },
+      { num: I.evKm, fmt: fmt1, lbl: "km im E-Auto", sub: "mit dieser Energie", accent: "purple" },
+    ]);
+
+    Charts.hbars(
+      chartCard("charts-oeko", "Energie nach Modell", "geschätzter Stromverbrauch je Modell — Reasoning-Modelle wiegen schwerer", true),
+      {
+        items: I.energyByModel.map(m => ({ label: m.label, value: m.wh })),
+        palette: true,
+        valueFmt: fmtEnergy,
+        aria: "Ranking: geschätzter Energieverbrauch je Modell" + (I.energyByModel[0] ? `, Platz 1: ${I.energyByModel[0].label}` : ""),
+      }
+    );
   }
 
   /* ── Chat-Reader ──────────────────────────────────────── */
