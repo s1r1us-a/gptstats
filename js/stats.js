@@ -85,6 +85,7 @@ const Stats = (() => {
   function prettyModel(slug) {
     if (!slug) return "Unbekannt";
     if (slug === "auto") return "Auto";
+    if (slug === "bildgenerierung") return "Bildgenerierung";
     let s = slug.replace(/^gpt-(\d+)-(\d+)/, "GPT-$1.$2");
     s = s.replace(/-thinking/, " Thinking").replace(/-instant/, " Instant")
          .replace(/-mini/, " Mini").replace(/-auto/, " Auto").replace(/-nano/, " Nano");
@@ -591,10 +592,29 @@ const Stats = (() => {
       CO2_G_PER_PKM_TRAIN: 26,   // UBA 2024, Eisenbahn Fernverkehr
       CO2_G_PER_PKM_FLIGHT: 290, // UBA 2024, Inlandflug inkl. Nicht-CO₂-Effekte
       CO2_G_PER_PKM_PEDELEC: 3,  // UBA 2024, Pedelec
+      // Bildgenerierung: Luccioni, Jernite & Strubell, „Power Hungry
+      // Processing" (FAccT '24, arXiv 2311.16863): ~2,9 Wh je Bild (SDXL).
+      IMAGE_GEN_WH_PER_IMAGE: 2.9,
+      // Google (arXiv 2508.15734, 2025): Median-Gemini-Prompt ≈ 0,24 Wh —
+      // als Branchen-Vergleichswert neben Altmans 0,34 Wh.
+      GEMINI_PROMPT_WH: 0.24,
+      // Mistral-LCA mit ADEME/Carbone 4 (2025): 1,14 g CO₂e je 400-Token-
+      // Antwort inkl. Training & Hardware → ~2,85 g je 1.000 Antwort-Tokens.
+      LCA_CO2_G_PER_1K_TOKENS: 2.85,
+      // Eine Buche bindet ~12,5 kg CO₂/Jahr (FNR-Themenportal Wald /
+      // Bundeswaldinventur; Größenordnung auch im UBA-CO₂-Rechner).
+      TREE_CO2_KG_PER_YEAR: 12.5,
     };
 
     const energyMap = new Map();
-    let energyWh = 0, reasoningEnergyWh = 0;
+    const monthMap = new Map(); // "YYYY-MM" → {wh, replies}
+    const addMonthWh = (t, wh, replies) => {
+      const mk = dateKey(t).slice(0, 7);
+      const e = monthMap.get(mk) || { wh: 0, replies: 0 };
+      e.wh += wh; e.replies += replies;
+      monthMap.set(mk, e);
+    };
+    let energyWh = 0, reasoningEnergyWh = 0, imageGenWh = 0;
     let promptTokens = 0, outputTokens = 0, contextTokens = 0, weightedTokens = 0, measuredReplies = 0;
     const tokenEstimate = (chars) => chars / 4;
     const reasoningMultiplier = (sec) => {
@@ -623,6 +643,19 @@ const Stats = (() => {
           visibleContextTokens += msgTokens;
           continue;
         }
+
+        // KI-generierte Bilder verbrauchen zusätzlich zur Text-Inferenz
+        // Energie. DALL·E-Antworten stehen im Export oft als "tool"-Nachricht,
+        // deshalb hier vor dem Rollen-Filter zählen.
+        const imgWh = m.images.length * IMPACT.IMAGE_GEN_WH_PER_IMAGE;
+        if (imgWh > 0) {
+          energyWh += imgWh;
+          imageGenWh += imgWh;
+          addMonthWh(m.t, imgWh, 0);
+          const imgSlug = m.model || "bildgenerierung";
+          energyMap.set(imgSlug, (energyMap.get(imgSlug) || 0) + imgWh);
+        }
+
         if (m.role !== "assistant") {
           visibleContextTokens += msgTokens;
           continue;
@@ -638,6 +671,7 @@ const Stats = (() => {
 
         energyWh += wh;
         if (thinking) reasoningEnergyWh += wh;
+        addMonthWh(m.t, wh, 1);
         promptTokens += pendingPromptTokens;
         outputTokens += outTokens;
         contextTokens += contextEstimate;
@@ -654,6 +688,14 @@ const Stats = (() => {
     const energyByModel = topEntries(energyMap, 10)
       .map(e => ({ label: prettyModel(e.key), wh: e.value }));
 
+    const byMonth = [...monthMap.entries()]
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([key, v]) => ({
+        key, wh: v.wh, replies: v.replies,
+        co2g: v.wh * IMPACT.CO2_G_PER_WH,
+        waterMl: v.wh * IMPACT.WATER_ML_PER_WH,
+      }));
+
     const waterMl = energyWh * IMPACT.WATER_ML_PER_WH;
     const waterMlLow = energyWh * IMPACT.WATER_ML_PER_WH_LOW;
     const waterMlHigh = energyWh * IMPACT.WATER_ML_PER_WH_HIGH;
@@ -666,7 +708,12 @@ const Stats = (() => {
     const impact = {
       energyWh, waterMl, waterMlLow, waterMlHigh, co2g, co2gGermany,
       promptTokens, outputTokens, contextTokens, weightedTokens, measuredReplies,
-      energyByModel,
+      energyByModel, byMonth,
+      imageGenWh,
+      imageGenPct: energyWh > 0 ? imageGenWh / energyWh * 100 : 0,
+      // Alternative Sicht inkl. Training & Hardware (Mistral-LCA 2025),
+      // bezogen auf die Antwort-Tokens — bewusst ohne Reasoning-Gewichtung.
+      co2gLifecycle: outputTokens / 1000 * IMPACT.LCA_CO2_G_PER_1K_TOKENS,
       reasoningEnergyPct: energyWh > 0 ? reasoningEnergyWh / energyWh * 100 : 0,
       // greifbare Vergleiche
       bottles: waterMl / 500,                        // 0,5-L-Flaschen
@@ -679,7 +726,9 @@ const Stats = (() => {
       ledHours: energyWh / 10,                       // 10-W-LED-Lampe
       streamingHours: energyWh / IMPACT.STREAMING_VIDEO_WH_PER_HOUR,
       avgQueryEquiv: energyWh / IMPACT.AVG_CHATGPT_QUERY_WH,
+      geminiQueryEquiv: energyWh / IMPACT.GEMINI_PROMPT_WH,
       avgWhPerReply: energyWh / Math.max(1, measuredReplies),
+      treeDays: co2g / (IMPACT.TREE_CO2_KG_PER_YEAR * 1000 / 365),
       evKm: energyWh / 160,                          // ~160 Wh/km E-Auto
       showerMinutes: waterL / IMPACT.SHOWER_L_PER_MIN,
       toiletFlushes: waterL / IMPACT.TOILET_L_PER_FLUSH,

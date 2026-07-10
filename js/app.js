@@ -525,18 +525,24 @@
   function renderImpact(S) {
     const I = S.impact;
 
-    fillGrid("grid-oeko", [
+    const resourceCards = [
       { num: I.waterMl, fmt: fmtWater, lbl: "Wasser verbraucht", sub: "Spanne: " + fmtWater(I.waterMlLow) + "–" + fmtWater(I.waterMlHigh) + " · CO₂: " + fmtCo2(I.co2g), accent: "teal" },
       { num: I.energyWh, fmt: fmtEnergy, lbl: "Strom verbraucht", sub: withFootprint(I, "≈ " + fmtCompare(I.phoneCharges) + " Handy-Ladungen"), accent: "green" },
       { num: I.co2g, fmt: fmtCo2, lbl: "CO₂ ausgestoßen", sub: "globaler Mix · DE 2025: " + fmtCo2(I.co2gGermany), accent: "blue" },
+      { num: I.co2gLifecycle, fmt: fmtCo2, lbl: "CO₂ inkl. Lebenszyklus", sub: "Mistral-LCA 2025: ≈ 2,85 g je 1.000 Antwort-Tokens inkl. Training & Hardware", accent: "purple" },
       { num: I.weightedTokens, fmt: fmtInt, lbl: "gewichtete Text-Tokens", sub: withFootprint(I, "Prompt + Antwort + Kontext + Reasoning"), accent: "indigo" },
-    ]);
+    ];
+    if (I.imageGenWh > 0) resourceCards.push(
+      { num: I.imageGenWh, fmt: fmtEnergy, lbl: "davon Bildgenerierung", sub: fmtPct(I.imageGenPct) + " des Stroms · Luccioni et al. 2024: ≈ 2,9 Wh je KI-Bild", accent: "orange" }
+    );
+    fillGrid("grid-oeko", resourceCards);
 
     fillGrid("grid-oeko-vergleiche", [
       { num: I.streamingHours, fmt: fmt1, lbl: "Std. Video-Streaming", sub: withFootprint(I, "IEA: ca. 0,077 kWh/h für Gerät, Netz & Rechenzentren"), accent: "pink" },
       { num: I.ledHours, fmt: fmt1, lbl: "Std. LED-Lampe (10 W)", sub: withFootprint(I, "mit dieser Energie"), accent: "yellow" },
       { num: I.phoneCharges, fmt: fmtCompare, lbl: "Handy-Ladungen", sub: withFootprint(I, "grob 12 Wh pro Ladung"), accent: "green" },
       { num: I.avgQueryEquiv, fmt: fmtCompare, lbl: "Ø ChatGPT-Queries", sub: withFootprint(I, "Energie-Äquivalent nach 0,34 Wh/Query"), accent: "purple" },
+      { num: I.geminiQueryEquiv, fmt: fmtCompare, lbl: "Median-Gemini-Prompts", sub: withFootprint(I, "Google 2025: 0,24 Wh je Prompt"), accent: "indigo" },
       { num: I.evKm, fmt: fmt1, lbl: "km im E-Auto", sub: withFootprint(I, "mit dieser Energie"), accent: "teal" },
     ]);
 
@@ -550,6 +556,7 @@
       { num: I.trainKm, fmt: fmtCompare, lbl: "Bahn-km Fernverkehr", sub: withFootprint(I, "UBA 2024: 26 g CO₂e/Pkm"), accent: "green" },
       { num: I.flightKm, fmt: fmtCompare, lbl: "Inlandsflug-km", sub: withFootprint(I, "UBA 2024: 290 g CO₂e/Pkm"), accent: "purple" },
       { num: I.pedelecKm, fmt: fmtCompare, lbl: "Pedelec-km", sub: withFootprint(I, "UBA 2024: 3 g CO₂e/Pkm"), accent: "yellow" },
+      { num: I.treeDays, fmt: fmtCompare, lbl: "Buchen-Tage", sub: withFootprint(I, "so lange bindet eine Buche das CO₂ (≈ 12,5 kg/Jahr)"), accent: "teal" },
     ]);
 
     fillGrid("grid-oeko-food", [
@@ -572,6 +579,7 @@
   /* ── Chat-Reader ──────────────────────────────────────── */
 
   let MODEL = null;
+  let FULL_STATS = null; // Stats über den gesamten Export (für Wrapped-Monatsvergleiche)
   const reader = { sort: "date", selected: null, listStale: true, convModels: new Map() };
 
   /* Modell-Filter mit den im Export gefundenen Modellen befüllen */
@@ -819,6 +827,7 @@
 
     const S = Stats.compute(model);
     MODEL = model;
+    FULL_STATS = S;
     reader.listStale = true;
     reader.selected = null;
     reader.convModels = new Map(model.conversations.map(c =>
@@ -883,7 +892,7 @@
 
     $("analyzeBtn").addEventListener("click", analyze);
     $("resetBtn").addEventListener("click", () => location.reload());
-    $("wrappedBtn").addEventListener("click", () => Wrapped.openPicker(MODEL));
+    $("wrappedBtn").addEventListener("click", () => Wrapped.openPicker(MODEL, FULL_STATS));
 
     // Demo-Modus: synthetischer Export durchläuft die normale Pipeline
     $("demoBtn").addEventListener("click", () => {

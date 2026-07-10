@@ -187,6 +187,19 @@ const Demo = (() => {
           t += (sec || 3) + 2;
         }
 
+        /* — KI-Bildgenerierung (DALL·E-Stil: tool-Nachricht mit Bild) — */
+        if (!isVoice && chance(0.05)) {
+          addNode({
+            author: { role: "tool", name: "dalle.text2im" }, create_time: t,
+            content: {
+              content_type: "multimodal_text",
+              parts: [{ content_type: "image_asset_pointer", asset_pointer: "sediment://file_demo_gen_" + (fileNo++), size_bytes: int(200000, 2000000), width: 1024, height: 1024 }],
+            },
+            metadata: { model_slug: model.slug },
+          });
+          t += int(5, 30);
+        }
+
         /* — KI-Antwort — */
         const aiMeta = { model_slug: model.slug };
         let aiContent;
