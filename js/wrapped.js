@@ -15,6 +15,14 @@ const Wrapped = (() => {
   const fmt1 = (n) => nf1.format(n);
   const fmtPct = (n) => nf1.format(n) + " %";
 
+  const fmtEnergy = (wh) => wh >= 1000 ? fmt1(wh / 1000) + " kWh" : fmt1(wh) + " Wh";
+  const fmtWater = (ml) => {
+    if (ml >= 1e6) return fmt1(ml / 1e6) + " m³";
+    if (ml >= 1000) return fmt1(ml / 1000) + " L";
+    return fmtInt(ml) + " ml";
+  };
+  const fmtCo2 = (g) => g >= 1000 ? fmt1(g / 1000) + " kg" : fmt1(g) + " g";
+
   function fmtDur(sec) {
     sec = Math.round(sec);
     if (sec >= 3600) return Math.floor(sec / 3600) + " h " + Math.round((sec % 3600) / 60) + " min";
@@ -35,6 +43,9 @@ const Wrapped = (() => {
 
   const MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni",
                   "Juli", "August", "September", "Oktober", "November", "Dezember"];
+
+  // "YYYY-MM" → "März"
+  const monthName = (key) => MONTHS[+key.slice(5, 7) - 1];
 
   /* ── Zeitraum-Logik ───────────────────────────────────── */
 
@@ -91,7 +102,7 @@ const Wrapped = (() => {
 
   /* ── Count-Up für [data-count]-Zahlen ─────────────────── */
 
-  const FMTS = { int: fmtInt, f1: fmt1, pct: fmtPct, dur: fmtDur };
+  const FMTS = { int: fmtInt, f1: fmt1, pct: fmtPct, dur: fmtDur, energy: fmtEnergy };
   const cnt = (v, fmt = "int") =>
     `<span data-count="${v}" data-fmt="${fmt}">${FMTS[fmt](v)}</span>`;
 
@@ -290,6 +301,59 @@ const Wrapped = (() => {
       },
     },
     {
+      id: "oekobilanz",
+      when: (ctx) => ctx.S.impact.energyWh > 0,
+      html: (ctx) => {
+        const I = ctx.S.impact;
+        const rows = [
+          listRow("💧", `<strong>${fmtWater(I.waterMl)} Wasser</strong> — wie ${fmt1(I.showerMinutes)} Minuten duschen`),
+          listRow("🌍", `<strong>${fmtCo2(I.co2g)} CO₂</strong> — wie ${fmt1(I.carKm)} km mit dem Auto`),
+          listRow("🔋", `entspricht <strong>${fmt1(I.phoneCharges)} Handy-Ladungen</strong>`),
+        ];
+        const im = ctx.impactMonth;
+        if (im && im.prev && im.prev.wh > 0) {
+          const pct = (im.cur.wh - im.prev.wh) / im.prev.wh * 100;
+          const up = pct >= 0;
+          rows.push(listRow(up ? "📈" : "📉",
+            `<strong>${up ? "+" : "−"}${fmtPct(Math.abs(pct))} Energie</strong> im Vergleich zum ${esc(im.prevLabel)}`));
+        }
+        if (im && im.total >= 3) {
+          const rankText = im.rank === 1 ? "dein <strong>grünster Monat</strong> überhaupt 🎉"
+            : im.rank === im.total ? "dein bisher <strong>energiehungrigster Monat</strong>"
+            : `dein <strong>${im.rank}.-grünster Monat</strong> von ${im.total}`;
+          rows.push(listRow("🌱", rankText));
+        }
+        return `
+        <p class="wr-kicker">Deine Umweltbilanz</p>
+        <div class="wr-big">⚡ ${cnt(I.energyWh, "energy")}</div>
+        <p class="wr-title">Strom, grob geschätzt</p>
+        <div class="wr-list">${rows.join("")}</div>
+        <p class="wr-hint">Schätzung aus sichtbaren Tokens — der Export enthält keine Messwerte.</p>`;
+      },
+    },
+    {
+      id: "gruenster-monat",
+      when: (ctx) => ctx.month == null && ctx.S.impact.byMonth.length >= 2,
+      html: (ctx) => {
+        const by = ctx.S.impact.byMonth;
+        let best = by[0], worst = by[0];
+        for (const e of by) {
+          if (e.wh < best.wh) best = e;
+          if (e.wh > worst.wh) worst = e;
+        }
+        return `
+        <p class="wr-kicker">Grün & weniger grün</p>
+        <h2 class="wr-title wr-grad">🌱 ${monthName(best.key)}</h2>
+        <p class="wr-text">war dein <strong>bester Monat</strong> — die wenigsten Umweltschäden mit nur
+        ${fmtEnergy(best.wh)} Strom und ${fmtCo2(best.co2g)} CO₂.</p>
+        <div class="wr-list">
+          ${listRow("🏭", `<strong>${monthName(worst.key)}</strong> war dein schlechtester —
+          ${fmtEnergy(worst.wh)} Strom, ${fmtCo2(worst.co2g)} CO₂ und ${fmtWater(worst.waterMl)} Wasser`)}
+        </div>
+        <p class="wr-hint">Gewertet wird der geschätzte Verbrauch: weniger ist besser.</p>`;
+      },
+    },
+    {
       id: "vorperiode",
       when: (ctx) => ctx.prev && ctx.prev.msgs > 0,
       html: (ctx) => {
@@ -329,7 +393,7 @@ const Wrapped = (() => {
   const reducedMotion = () =>
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  function open(model, { year, month = null }) {
+  function open(model, { year, month = null }, fullStats = null) {
     const range = periodRange(year, month);
     const filtered = filterModel(model, range);
     if (!filtered.conversations.length) return; // Guard: compute crasht auf leerem Modell
@@ -353,7 +417,28 @@ const Wrapped = (() => {
     const newConvs = model.conversations
       .filter(c => c.createTime && inRange(c.createTime, range)).length;
 
-    state.ctx = { S, label, year, month, prev, newConvs, periodDays, reduced: reducedMotion() };
+    // Monats-Wrapped: Einordnung gegenüber Vormonat & allen Monaten,
+    // basierend auf der Ökobilanz des gesamten Exports (app.js liefert sie mit)
+    let impactMonth = null;
+    if (month != null && fullStats && fullStats.impact && fullStats.impact.byMonth.length) {
+      const by = fullStats.impact.byMonth;
+      const key = year + "-" + String(month + 1).padStart(2, "0");
+      const cur = by.find(e => e.key === key);
+      if (cur) {
+        const py = month === 0 ? year - 1 : year;
+        const pm = month === 0 ? 11 : month - 1;
+        const pKey = py + "-" + String(pm + 1).padStart(2, "0");
+        impactMonth = {
+          cur,
+          prev: by.find(e => e.key === pKey) || null,
+          prevLabel: MONTHS[pm] + " " + py,
+          rank: 1 + by.filter(e => e.wh < cur.wh).length,
+          total: by.length,
+        };
+      }
+    }
+
+    state.ctx = { S, label, year, month, prev, newConvs, periodDays, impactMonth, reduced: reducedMotion() };
     state.slides = SLIDES.filter(s => s.when(state.ctx));
     state.i = 0;
     state.lastFocus = document.activeElement;
@@ -489,7 +574,7 @@ const Wrapped = (() => {
 
   /* ── Zeitraum-Picker ──────────────────────────────────── */
 
-  function openPicker(model) {
+  function openPicker(model, fullStats = null) {
     if (!model) return;
     const periods = availablePeriods(model);
     if (!periods.length) return;
@@ -535,7 +620,7 @@ const Wrapped = (() => {
         const year = +btn.dataset.year;
         const month = btn.dataset.month === undefined ? null : +btn.dataset.month;
         closePicker();
-        open(model, { year, month });
+        open(model, { year, month }, fullStats);
       });
     });
 

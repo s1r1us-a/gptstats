@@ -83,6 +83,10 @@ node tests/regression.js
 - Wasser-Spanne: [OECD.AI](https://oecd.ai/en/wonk/how-much-water-does-ai-consume) / [„Making AI Less Thirsty"](https://arxiv.org/abs/2304.03271) — standortabhängige KI-Wassernutzung von etwa 1,8–12 L/kWh; die sehr niedrige Vergleichsgrenze leitet sich aus Altmans Ø-Query-Wasserangabe ab.
 - Alltag/Wasser: [EPA WaterSense Showerheads](https://www.epa.gov/watersense/showerheads) und [Residential Toilets](https://www.epa.gov/watersense/residential-toilets) — Standarddusche 2,5 gal/min; WaterSense-Toiletten 1,28 gal/Spülung.
 - Lebensmittelwasser: [Water Footprint Network](https://www.waterfootprint.org/resources/interactive-tools/product-gallery/) / [University of Twente](https://research.utwente.nl/en/publications/the-green-blue-and-grey-water-footprint-of-animals-and-animal-pro/) — u. a. Rindfleisch 15.400 m³/t.
+- Bildgenerierung: [Luccioni, Jernite & Strubell, „Power Hungry Processing" (FAccT '24)](https://arxiv.org/abs/2311.16863) — ~2,9 Wh je generiertem Bild (Stable Diffusion XL, 1.000 Inferenzen ≈ 2,907 kWh).
+- Gemini-Vergleich: [Google, „Measuring the environmental impact of delivering AI at Google Scale" (2025)](https://arxiv.org/abs/2508.15734) — Median-Gemini-Prompt ≈ 0,24 Wh, 0,26 ml Wasser, 0,03 g CO₂e.
+- Lebenszyklus-CO₂: [Mistral AI, Ökobilanz mit ADEME/Carbone 4 (2025)](https://mistral.ai/news/our-contribution-to-a-global-environmental-standard-for-ai/) — 1,14 g CO₂e je 400-Token-Antwort inkl. Training & Hardware (~2,85 g je 1.000 Antwort-Tokens).
+- Baum-Vergleich: [FNR-Themenportal Wald (Kohlenstoffinventur)](https://wald.fnr.de/wissen/themendossiers/kohlenstoffspeicher/faq-kohlenstoffspeicher-wald-und-holz-in-zahlen) — eine Buche bindet grob 12,5 kg CO₂ pro Jahr.
 
 ## Lizenz
 
