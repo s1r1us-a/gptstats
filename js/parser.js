@@ -83,6 +83,10 @@ const Parser = (() => {
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "Excel",
       "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PowerPoint",
       "application/msword": "Word",
+      "text/markdown": "Markdown",
+      "text/html": "HTML",
+      "text/x-diff": "Diff",
+      "image/svg+xml": "SVG",
     };
     if (map[mime]) return map[mime];
     if (mime.startsWith("image/")) return mime.slice(6).toUpperCase();
@@ -232,19 +236,57 @@ const Parser = (() => {
     };
   }
 
+  /* ── Bibliothek & Manifest normalisieren ──────────────── */
+
+  /* Ein Eintrag aus library_files.json (ChatGPT-Bibliothek) → flaches Objekt.
+     Gibt null zurück für gelöschte/papierkorbte Einträge. */
+  function normalizeLibraryFile(e) {
+    if (!e || typeof e !== "object") return null;
+    if (e.trashed_at || e.deleted_at) return null;
+    const parsed = e.created_at ? Date.parse(e.created_at) : NaN;
+    return {
+      id: (e.id && e.id.id) || e.file_id || null,
+      name: e.file_name || "Unbenannt",
+      mime: e.mime_type || "",
+      mimeLabel: mimeLabel(e.mime_type),
+      category: e.library_file_category || "other",
+      sizeBytes: e.file_size_bytes || 0,
+      createdAt: Number.isFinite(parsed) ? parsed / 1000 : null,
+      convId: e.origination_thread_id || e.initiating_conversation_id || null,
+      isArtifact: !!e.library_artifact_type,
+    };
+  }
+
+  /* export_manifest.json → nur Aggregatzahlen; die .dat-Dateien sind die
+     Binär-Assets des Exports (Bilder, Audio, Anhänge). */
+  function summarizeManifest(data) {
+    const files = Array.isArray(data.export_files) ? data.export_files : [];
+    let totalBytes = 0, mediaFiles = 0, mediaBytes = 0;
+    for (const f of files) {
+      const size = (f && f.size_bytes) || 0;
+      totalBytes += size;
+      if (f && /\.dat$/i.test(f.path || "")) { mediaFiles++; mediaBytes += size; }
+    }
+    return { totalFiles: files.length, totalBytes, mediaFiles, mediaBytes };
+  }
+
   /* ── Payload-Klassifizierung & Merge ──────────────────── */
 
-  // Ein geparstes JSON einordnen: Konversations-Array, Asset-Namen-Map
-  // oder user.json (Konto-Infos)?
+  // Ein geparstes JSON einordnen: Konversations-Array, Bibliothek
+  // (library_files.json), Export-Manifest, Asset-Namen-Map oder
+  // user.json (Konto-Infos)?
   function classify(data) {
     if (Array.isArray(data)) {
       if (data.length === 0) return "empty";
-      if (data[0] && typeof data[0] === "object" && ("mapping" in data[0] || "conversation_id" in data[0])) {
-        return "conversations";
+      const first = data[0];
+      if (first && typeof first === "object") {
+        if ("mapping" in first || "conversation_id" in first) return "conversations";
+        if ("file_id" in first && ("library_file_category" in first || "file_name" in first)) return "library";
       }
       return "unknown";
     }
     if (data && typeof data === "object") {
+      if (Array.isArray(data.export_files)) return "manifest";
       // user.json VOR der Asset-Map prüfen — sie besteht ebenfalls nur aus
       // String-Werten und würde sonst als Asset-Namen fehlklassifiziert
       if ("chatgpt_plus_user" in data || "email" in data ||
@@ -272,6 +314,10 @@ const Parser = (() => {
           if (!ids.has(id)) { ids.add(id); added++; }
         }
         report.push({ name, ok: true, info: `${added} Konversationen` });
+      } else if (kind === "library") {
+        report.push({ name, ok: true, info: `${data.length} Bibliotheks-Dateien` });
+      } else if (kind === "manifest") {
+        report.push({ name, ok: true, info: `Export-Manifest (${data.export_files.length} Dateien)` });
       } else if (kind === "assets") {
         report.push({ name, ok: true, info: `${Object.keys(data).length} Asset-Namen` });
       } else if (kind === "user") {
@@ -285,11 +331,14 @@ const Parser = (() => {
     return { report, ids };
   }
 
-  /* payloads: [{name, data}] → {conversations:[…], assetNames:{}, userInfo, report:[…]} */
+  /* payloads: [{name, data}] →
+     {conversations:[…], assetNames:{}, userInfo, libraryFiles:[…], manifest, report:[…]} */
   function buildModel(payloads) {
     const byId = new Map();
     const assetNames = {};
+    const libById = new Map();
     let userInfo = null;
+    let manifest = null;
     const report = [];
 
     for (const { name, data } of payloads) {
@@ -301,6 +350,18 @@ const Parser = (() => {
           if (!byId.has(conv.id)) { byId.set(conv.id, conv); added++; }
         }
         report.push({ name, ok: true, info: `${added} Konversationen` });
+      } else if (kind === "library") {
+        let added = 0;
+        for (const e of data) {
+          const f = normalizeLibraryFile(e);
+          if (!f) continue;
+          const key = f.id || `${f.name}|${f.createdAt}`;
+          if (!libById.has(key)) { libById.set(key, f); added++; }
+        }
+        report.push({ name, ok: true, info: `${added} Bibliotheks-Dateien` });
+      } else if (kind === "manifest") {
+        manifest = summarizeManifest(data);
+        report.push({ name, ok: true, info: `Export-Manifest (${manifest.totalFiles} Dateien)` });
       } else if (kind === "assets") {
         Object.assign(assetNames, data);
         report.push({ name, ok: true, info: `${Object.keys(data).length} Asset-Namen` });
@@ -315,7 +376,7 @@ const Parser = (() => {
     }
 
     const conversations = [...byId.values()].sort((a, b) => (a.createTime || 0) - (b.createTime || 0));
-    return { conversations, assetNames, userInfo, report };
+    return { conversations, assetNames, userInfo, libraryFiles: [...libById.values()], manifest, report };
   }
 
   /* ── Datei-Handling ───────────────────────────────────── */

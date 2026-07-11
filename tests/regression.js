@@ -125,6 +125,68 @@ assert.ok(impact.treeDays > 0);
 assert.ok(impact.geminiQueryEquiv > impact.avgQueryEquiv, "0,24 Wh je Gemini-Prompt < 0,34 Wh je Ø-Query");
 assert.ok(impact.co2gLifecycle > 0);
 
+/* ── Bibliothek (library_files.json) & Export-Manifest ── */
+
+const libraryPayload = [
+  {
+    id: { id: "libfile_a" }, file_id: "file_a", file_name: "ChatGPT Image Katze.png",
+    mime_type: "image/png", file_size_bytes: 500000,
+    created_at: "2024-01-15T12:00:00+00:00",
+    library_file_category: "image", library_artifact_type: "image",
+    origination_thread_id: "branch-test", trashed_at: null, deleted_at: null,
+  },
+  {
+    id: { id: "libfile_b" }, file_id: "file_b", file_name: "Bericht.pdf",
+    mime_type: "application/pdf", file_size_bytes: 100000,
+    created_at: "2024-02-15T12:00:00+00:00",
+    library_file_category: "pdf", library_artifact_type: null,
+    origination_thread_id: null, trashed_at: null, deleted_at: null,
+  },
+  { // gelöschte Einträge werden übersprungen
+    id: { id: "libfile_c" }, file_id: "file_c", file_name: "alt.png",
+    mime_type: "image/png", file_size_bytes: 999,
+    created_at: "2024-02-16T12:00:00+00:00",
+    library_file_category: "image", library_artifact_type: null,
+    origination_thread_id: null, trashed_at: "2024-03-01T12:00:00+00:00", deleted_at: null,
+  },
+];
+
+const manifestPayload = {
+  export_files: [
+    { path: "conversations-000.json", size_bytes: 1000 },
+    { path: "file_aaaa.dat", size_bytes: 4000 },
+    { path: "file_bbbb.dat", size_bytes: 6000 },
+  ],
+  logical_files: {},
+  manifest_file: "export_manifest.json",
+  version: 1,
+};
+
+const libModel = Parser.buildModel([
+  { name: "branch.json", data: [branchedConversation] },
+  { name: "library_files.json", data: libraryPayload },
+  { name: "library_files.json", data: libraryPayload }, // Duplikat wird dedupliziert
+  { name: "export_manifest.json", data: manifestPayload },
+]);
+assert.strictEqual(libModel.libraryFiles.length, 2, "trashed raus, Duplikate dedupliziert");
+assertJsonEqual(libModel.manifest, { totalFiles: 3, totalBytes: 11000, mediaFiles: 2, mediaBytes: 10000 });
+assert.ok(libModel.report.every(r => r.ok), "alle Dateien werden erkannt");
+
+const libMedia = Stats.compute(libModel).media;
+assert.strictEqual(libMedia.library.total, 2);
+assert.strictEqual(libMedia.library.totalBytes, 600000);
+assert.strictEqual(libMedia.library.artifacts, 1);
+assert.strictEqual(libMedia.library.uploads, 1);
+assert.strictEqual(libMedia.library.withConv, 1);
+assert.strictEqual(libMedia.library.largest.name, "ChatGPT Image Katze.png");
+assertJsonEqual(libMedia.library.perMonth.map(e => [e.key, e.count]), [["2024-01", 1], ["2024-02", 1]]);
+assertJsonEqual(libMedia.library.types.map(t => t.key).sort(), ["PDF", "PNG"]);
+assertJsonEqual(libMedia.manifest, { totalFiles: 3, totalBytes: 11000, mediaFiles: 2, mediaBytes: 10000 });
+
+// Ohne Bibliothek/Manifest bleiben die Felder leer (keine Pflichtdateien)
+assert.strictEqual(stats.media.library, null);
+assert.strictEqual(stats.media.manifest, null);
+
 assertJsonEqual(Parser.parseRecapSeconds("Nachgedacht fuer 2 Minuten"), { sec: 120, estimated: false });
 assertJsonEqual(Parser.parseRecapSeconds("Thought for 2 minutes"), { sec: 120, estimated: false });
 assertJsonEqual(Parser.parseRecapSeconds("Nachgedacht fuer 1m 30s"), { sec: 90, estimated: false });

@@ -246,7 +246,7 @@ const Charts = (() => {
   }
 
   /* ═════════ Balkendiagramm (vertikal) ═════════
-     opts = { labels, values, color | colors, height, tipLabel(i) } */
+     opts = { labels, values, color | colors, height, tipLabel(i), unit } */
   function bars(el, opts) {
     applyAria(el, opts, true);
     register(el, () => {
@@ -279,7 +279,7 @@ const Charts = (() => {
 
         bindTip(r, () => {
           r.style.opacity = 1;
-          return `<div class="tt-title">${esc(opts.tipLabel ? opts.tipLabel(i) : opts.labels[i])}</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;Nachrichten</div>`;
+          return `<div class="tt-title">${esc(opts.tipLabel ? opts.tipLabel(i) : opts.labels[i])}</div><div class="tt-row"><b>${fmtNum(v)}</b>&nbsp;${esc(opts.unit || "Nachrichten")}</div>`;
         }, () => { r.style.opacity = .92; });
 
         if (i % labelStep === 0) {

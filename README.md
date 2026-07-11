@@ -14,7 +14,7 @@ Ziehe die `conversations-*.json` Dateien deines Exports in den Browser und erhal
 - **Modelle** — Verteilung der genutzten Modelle (Donut), Thinking-Anteil, Modellnutzung über Zeit, Start-Modell-Ranking
 - **Reasoning** — Gesamt-Denkzeit der Modelle, Ø/längste Denkzeit, Denkzeit-Histogramm, Umfang der mitlesbaren Gedanken
 - **Gespräche** — Top 10, Themen-Wortwolke, One-Shot-Chats, Custom-GPT- & Voice-Gespräche
-- **Medien & Tools** — Bild-Uploads, Live-Voice-Split (deine Beiträge vs. KI-Audio-Antworten inkl. gesprochener Wörter), Datei-Anhänge nach Typ, Code-Blöcke
+- **Medien & Tools** — Bild-Uploads, Live-Voice-Split (deine Beiträge vs. KI-Audio-Antworten inkl. gesprochener Wörter), Datei-Anhänge nach Typ, Code-Blöcke, ChatGPT-Bibliothek (echte Dateitypen, Datenvolumen, KI-Artefakte vs. Uploads, Verlauf über Zeit) und Export-Gesamtgröße
 - **Websuche** — zitierte Quellen, Top-Domains, Verweis-Typen
 - **Text-Insights** — Top-Wörter deiner Prompts (Stoppwort-gefiltert DE/EN), Fragen-Quote, längste Nachrichten
 - **Fun Facts** — Buchseiten-Äquivalent, Kino-Vergleich, längste Session, nächtlichste Nachricht, Emoji-Zähler u. v. m.
@@ -43,7 +43,12 @@ Keine Export-Dateien zur Hand? Ein Klick auf **„Mit Demo-Daten ausprobieren"**
 3. **`index.html` öffnen** (Doppelklick genügt — kein Server nötig).
 4. Die JSON-Dateien **in die Dropzone ziehen** und auf **Auswerten** klicken.
 
-Optional kann zusätzlich die `conversation_asset_file_names.json` mitgeladen werden.
+Optional können weitere Dateien aus dem Export mitgeladen werden — jede schaltet zusätzliche Karten frei, keine ist Pflicht:
+
+- `conversation_asset_file_names.json` — Original-Dateinamen der Anhänge (Kategorien per Namens-Heuristik)
+- `library_files.json` — Metadaten deiner ChatGPT-Bibliothek: echte MIME-Typen, Dateigrößen, Zeitstempel, KI-Artefakte
+- `export_manifest.json` — Inhaltsverzeichnis des Export-ZIPs → Gesamtgröße & Medienvolumen des Exports
+- `user.json` — Konto-Infos
 
 ## Projektstruktur
 

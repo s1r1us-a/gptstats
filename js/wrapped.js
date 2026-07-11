@@ -83,7 +83,13 @@ const Wrapped = (() => {
       const msgs = c.msgs.filter(m => m.t && inRange(m.t, range));
       if (msgs.some(m => m.isVisible)) conversations.push({ ...c, msgs });
     }
-    return { conversations, assetNames: model.assetNames, report: [] };
+    return {
+      conversations,
+      assetNames: model.assetNames,
+      libraryFiles: model.libraryFiles,
+      manifest: model.manifest,
+      report: [],
+    };
   }
 
   /* Leichter Zähler für den Vorperioden-Vergleich (kein Voll-compute) */
@@ -270,11 +276,12 @@ const Wrapped = (() => {
       when: (ctx) => {
         const m = ctx.S.media;
         return m.imgUser.count > 0 || m.spokenWordsUser > 0 || m.codeBlocksTotal > 0 ||
-               m.attCount > 0 || (m.assetLib && m.assetLib.genImages > 0);
+               m.attCount > 0 || (m.assetLib && m.assetLib.genImages > 0) || m.library;
       },
       html: (ctx) => {
         const m = ctx.S.media;
         const rows = [];
+        if (m.library) rows.push(listRow("🗂️", `<strong>${fmtInt(m.library.total)} Dateien</strong> in deiner Bibliothek (gesamter Export)`));
         if (m.assetLib && m.assetLib.genImages) rows.push(listRow("✨", `<strong>${fmtInt(m.assetLib.genImages)} KI-generierte Bilder</strong> gespeichert (gesamter Export)`));
         if (m.imgUser.count) rows.push(listRow("🖼️", `<strong>${fmtInt(m.imgUser.count)} Bilder</strong> hochgeladen`));
         if (m.spokenWordsUser) rows.push(listRow("🎙️", `<strong>${fmtInt(m.spokenWordsUser)} Wörter</strong> gesprochen — die KI antwortete mit ${fmtInt(m.spokenWordsAi)}`));
