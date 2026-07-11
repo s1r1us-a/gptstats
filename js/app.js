@@ -81,6 +81,11 @@
     return new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
 
+  // "YYYY-MM" → "Mai 26"
+  function fmtMonthKey(key) {
+    return new Date(key + "-15T12:00:00").toLocaleDateString("de-DE", { month: "short", year: "2-digit" });
+  }
+
   function fmtDateKey(key, long) {
     const d = new Date(key + "T12:00:00");
     return long
@@ -393,6 +398,26 @@
         sub: "aus conversation_asset_file_names.json", accent: "yellow",
       });
     }
+    const lib = m.library;
+    if (lib) {
+      cards.push({
+        num: lib.total, lbl: "Dateien in deiner Bibliothek",
+        sub: fmtBytes(lib.totalBytes) + " · aus library_files.json", accent: "indigo",
+      });
+      if (lib.artifacts) cards.push({
+        num: lib.artifacts, lbl: "Davon KI-erstellte Dateien",
+        sub: "als Artefakt gespeichert · " + fmtInt(lib.uploads) + " eigene Uploads", accent: "purple",
+      });
+      cards.push({
+        val: esc(lib.largest.name.length > 22 ? lib.largest.name.slice(0, 20) + "…" : lib.largest.name),
+        lbl: "Größte Bibliotheks-Datei", sub: fmtBytes(lib.largest.sizeBytes), accent: "pink",
+      });
+    }
+    if (m.manifest) cards.push({
+      val: fmtBytes(m.manifest.totalBytes), lbl: "Export-Größe gesamt",
+      sub: `${fmtInt(m.manifest.totalFiles)} Dateien im ZIP · davon ${fmtInt(m.manifest.mediaFiles)} Medien (${fmtBytes(m.manifest.mediaBytes)})`,
+      accent: "yellow", wide: true,
+    });
     fillGrid("grid-medien", cards);
 
     const c = "charts-medien";
@@ -411,12 +436,29 @@
         aria: "Ranking: genutzte ChatGPT-Stimmen in Voice-Gesprächen",
       });
     }
-    if (m.assetLib) {
+    if (lib && lib.types.length) {
+      Charts.donut(chartCard(c, "Bibliothek nach Dateityp", "echte MIME-Typen aus library_files.json"), {
+        items: lib.types.map(t => ({ label: t.key, value: t.value })),
+        centerLabel: "Dateien",
+        aria: "Ringdiagramm: Bibliotheks-Dateien nach Typ" +
+          (lib.types[0] ? `, am häufigsten ${lib.types[0].key}` : ""),
+      });
+    } else if (m.assetLib) {
+      // Fallback ohne library_files.json: Kategorien aus den Dateinamen raten
       Charts.donut(chartCard(c, "Deine Datei-Bibliothek", "Original-Dateinamen aus dem Export-ZIP, nach Typ"), {
         items: m.assetLib.categories.map(t => ({ label: t.key, value: t.value })),
         centerLabel: "Dateien",
         aria: "Ringdiagramm: Dateien im Export nach Typ" +
           (m.assetLib.categories[0] ? `, am häufigsten ${m.assetLib.categories[0].key}` : ""),
+      });
+    }
+    if (lib && lib.perMonth.length > 1) {
+      Charts.bars(chartCard(c, "Bibliothek über Zeit", "gespeicherte Dateien pro Monat", true), {
+        labels: lib.perMonth.map(e => fmtMonthKey(e.key)),
+        values: lib.perMonth.map(e => e.count),
+        color: Charts.PALETTE[3], height: 210, unit: "Dateien",
+        tipLabel: (i) => fmtMonthKey(lib.perMonth[i].key) + " · " + fmtBytes(lib.perMonth[i].bytes),
+        aria: "Balkendiagramm: in der Bibliothek gespeicherte Dateien pro Monat",
       });
     }
   }
@@ -899,7 +941,10 @@
       collected.length = 0;
       stagedIds = new Set();
       $("demoBadge").hidden = false;
-      window.ChatStats.ingestParsed([{ name: "demo-daten", data: Demo.generate() }]);
+      window.ChatStats.ingestParsed([
+        { name: "demo-daten", data: Demo.generate() },
+        { name: "demo-bibliothek", data: Demo.generateLibrary() },
+      ]);
     });
   }
 

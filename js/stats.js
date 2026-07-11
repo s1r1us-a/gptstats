@@ -129,6 +129,40 @@ const Stats = (() => {
     return { total: names.length, genImages, categories: topEntries(cats, 8) };
   }
 
+  /* Bibliotheks-Metadaten aus library_files.json aggregieren. Anders als
+     die Namens-Heuristik oben liefert die Bibliothek echte MIME-Typen,
+     Größen, Zeitstempel und die Ursprungs-Konversation. */
+  function classifyLibrary(files) {
+    if (!files || !files.length) return null;
+    const types = new Map();
+    const monthMap = new Map(); // "YYYY-MM" → {count, bytes}
+    let totalBytes = 0, artifacts = 0, withConv = 0;
+    let largest = { name: "—", sizeBytes: 0, convId: null };
+    for (const f of files) {
+      types.set(f.mimeLabel, (types.get(f.mimeLabel) || 0) + 1);
+      totalBytes += f.sizeBytes;
+      if (f.isArtifact) artifacts++;
+      if (f.convId) withConv++;
+      if (f.sizeBytes > largest.sizeBytes) largest = { name: f.name, sizeBytes: f.sizeBytes, convId: f.convId };
+      if (f.createdAt) {
+        const k = dateKey(f.createdAt).slice(0, 7);
+        const e = monthMap.get(k) || { count: 0, bytes: 0 };
+        e.count++; e.bytes += f.sizeBytes;
+        monthMap.set(k, e);
+      }
+    }
+    const perMonth = [...monthMap.entries()]
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([key, v]) => ({ key, count: v.count, bytes: v.bytes }));
+    return {
+      total: files.length, totalBytes,
+      artifacts, uploads: files.length - artifacts,
+      withConv, largest,
+      types: topEntries(types, 8),
+      perMonth,
+    };
+  }
+
   /* ═════════════ Hauptberechnung ═════════════ */
   function compute(model) {
     const convs = model.conversations;
@@ -434,6 +468,8 @@ const Stats = (() => {
       codeMsgs, codeBlocksTotal,
       convsWithCode: convsWithCode.size,
       assetLib: classifyAssets(model.assetNames),
+      library: classifyLibrary(model.libraryFiles),
+      manifest: model.manifest || null,
     };
 
     /* ── Websuche ──────────────────────────────────────── */

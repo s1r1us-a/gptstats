@@ -250,5 +250,51 @@ const Demo = (() => {
     return convs;
   }
 
-  return { generate };
+  /* ── Bibliothek (library_files.json) ──────────────────── */
+
+  const LIB_FILES = [
+    { name: "ChatGPT Image Sonnenuntergang.png", mime: "image/png", cat: "image", artifact: "image", size: [300000, 1800000] },
+    { name: "ChatGPT Image Logo-Entwurf.png", mime: "image/png", cat: "image", artifact: "image", size: [300000, 1800000] },
+    { name: "urlaubsfoto.jpg", mime: "image/jpeg", cat: "image", artifact: null, size: [200000, 4000000] },
+    { name: "screenshot_dashboard.png", mime: "image/png", cat: "image", artifact: null, size: [100000, 900000] },
+    { name: "Projektbericht.pdf", mime: "application/pdf", cat: "pdf", artifact: null, size: [80000, 600000] },
+    { name: "Zusammenfassung.docx", mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", cat: "other", artifact: "report", size: [30000, 120000] },
+    { name: "landingpage.html", mime: "text/html", cat: "text", artifact: "other", size: [10000, 60000] },
+    { name: "notizen.md", mime: "text/markdown", cat: "text", artifact: null, size: [2000, 15000] },
+  ];
+
+  /* Erzeugt Einträge im Original-Schema von library_files.json —
+     dieselben Felder, die der Parser normalisiert. */
+  function generateLibrary() {
+    const rnd = mulberry32(20260703);
+    const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+    const int = (a, b) => a + Math.floor(rnd() * (b - a + 1));
+    const chance = (p) => rnd() < p;
+
+    const DAY = 86400;
+    const end = Math.floor(Date.now() / 1000) - DAY;
+    const start = end - 75 * DAY;
+
+    const files = [];
+    for (let i = 0; i < 28; i++) {
+      const tpl = pick(LIB_FILES);
+      const t = start + rnd() * (end - start);
+      files.push({
+        id: { id: "libfile_demo_" + String(i).padStart(3, "0") },
+        file_id: "file_demo_lib_" + String(i).padStart(3, "0"),
+        file_name: tpl.name.replace(/(\.[a-z]+)$/, chance(0.5) ? `(${int(1, 9)})$1` : "$1"),
+        mime_type: tpl.mime,
+        file_size_bytes: int(tpl.size[0], tpl.size[1]),
+        created_at: new Date(t * 1000).toISOString(),
+        library_file_category: tpl.cat,
+        library_artifact_type: tpl.artifact,
+        origination_thread_id: chance(0.5) ? "demo-" + String(int(0, 119)).padStart(4, "0") : null,
+        trashed_at: null,
+        deleted_at: null,
+      });
+    }
+    return files;
+  }
+
+  return { generate, generateLibrary };
 })();
