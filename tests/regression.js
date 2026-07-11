@@ -125,6 +125,38 @@ assert.ok(impact.treeDays > 0);
 assert.ok(impact.geminiQueryEquiv > impact.avgQueryEquiv, "0,24 Wh je Gemini-Prompt < 0,34 Wh je Ø-Query");
 assert.ok(impact.co2gLifecycle > 0);
 
+/* ── Kaputte Zeitstempel: Antwort liegt Wochen VOR der Frage ── */
+
+// Muster aus echten Exporten: Gespräch Ende Mai, aber eine assistant-Antwort
+// trägt einen create_time von Ende April — einen Monat vor der Frage.
+const T_MAY_27 = Date.parse("2026-05-27T20:10:44") / 1000;
+const T_APR_28 = Date.parse("2026-04-28T22:41:35") / 1000;
+
+const brokenTsConversation = {
+  conversation_id: "broken-ts",
+  title: "Broken timestamp",
+  create_time: T_MAY_27 - 5,
+  update_time: T_MAY_27 + 60,
+  current_node: "a1",
+  mapping: {
+    root: { id: "root", parent: null, children: ["u1"], message: null },
+    u1: { id: "u1", parent: "root", children: ["a1"], message: msg("user", T_MAY_27, "was ist ein spf record?") },
+    a1: { id: "a1", parent: "u1", children: [], message: msg("assistant", T_APR_28, "Ein SPF Record ist …", { model_slug: "gpt-4o" }) },
+  },
+};
+
+const brokenModel = Parser.buildModel([{ name: "broken.json", data: [brokenTsConversation] }]);
+const brokenConv = brokenModel.conversations[0];
+assert.strictEqual(brokenConv.repairedTimestamps, 1, "ein Zeitstempel repariert");
+assertJsonEqual(brokenConv.msgs.map(m => m.t), [T_MAY_27, T_MAY_27], "Antwort auf Fragezeit angehoben");
+assert.strictEqual(Stats.compute(brokenModel).overview.firstT, T_MAY_27, "Zeitspanne beginnt bei der echten ersten Nachricht");
+assert.ok(brokenModel.report[0].info.includes("1 fehlerhafte Zeitstempel repariert"));
+
+// Leicht rückdatierte Alternativen (Sekunden) bleiben unangetastet …
+assert.strictEqual(model.conversations[0].repairedTimestamps, 0);
+// … und der Chip erwähnt dann auch keine Reparatur
+assert.ok(!Parser.buildModel([{ name: "b.json", data: [branchedConversation] }]).report[0].info.includes("repariert"));
+
 /* ── Bibliothek (library_files.json) & Export-Manifest ── */
 
 const libraryPayload = [

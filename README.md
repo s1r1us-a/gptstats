@@ -78,6 +78,7 @@ node tests/regression.js
 - Die Auswertung basiert auf dem **finalen sichtbaren Gesprächspfad** (`current_node`) im Export. Verworfene oder regenerierte Antwort-Alternativen werden nicht mitgezählt.
 - Diktat (Speech-to-Text im Textchat) speichert der Export als normalen Text — es ist nicht von getippten Nachrichten unterscheidbar. Der Live-Voice-Modus dagegen schon.
 - Denkzeiten werden aus den „Nachgedacht für …"-Angaben geparst; Textangaben wie „ein paar Sekunden" werden konservativ geschätzt.
+- Der Export enthält vereinzelt **fehlerhafte Zeitstempel** (z. B. KI-Antworten, die angeblich Wochen vor der zugehörigen Frage liegen). Solche Ausreißer werden beim Einlesen auf den Zeitpunkt der Vorgänger-Nachricht korrigiert — der Datei-Chip beim Laden zeigt an, wie viele Zeitstempel repariert wurden.
 - Die Umweltbilanz ist eine Schätzung. Energie, Wasser und CO₂ werden aus sichtbaren Prompt-/Antwort-Tokens, Kontextaufschlag und Modelltyp abgeleitet; echte Messwerte enthält der Export nicht.
 
 ### Quellen für Umweltfaktoren

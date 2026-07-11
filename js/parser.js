@@ -220,6 +220,23 @@ const Parser = (() => {
     const totalMessageNodes = c.mapping
       ? Object.values(c.mapping).filter(node => node && node.message).length
       : msgs.length;
+
+    // Kaputte Zeitstempel reparieren: Der Export enthält vereinzelt Antworten,
+    // deren create_time WEIT vor der zugehörigen Frage liegt (z. T. Wochen).
+    // Innerhalb des finalen Pfads darf eine Nachricht nicht deutlich vor ihrer
+    // Vorgängerin liegen — solche Ausreißer werden auf deren Zeit angehoben.
+    // Toleranz 1 h, denn regenerierte Alternativen dürfen leicht rückdatiert sein.
+    let repairedTimestamps = 0;
+    if (isFinalPath) {
+      const TOLERANCE_SEC = 3600;
+      let runMax = c.create_time || 0;
+      for (const m of msgs) {
+        if (!m.t) continue;
+        if (runMax > 0 && m.t < runMax - TOLERANCE_SEC) { m.t = runMax; repairedTimestamps++; }
+        else if (m.t > runMax) runMax = m.t;
+      }
+    }
+
     if (!isFinalPath) msgs.sort((a, b) => (a.t || 0) - (b.t || 0));
     return {
       id: c.conversation_id || c.id,
@@ -232,6 +249,7 @@ const Parser = (() => {
       isArchived: !!c.is_archived,
       isStarred: !!c.is_starred,
       skippedAltMsgs: Math.max(0, totalMessageNodes - msgs.length),
+      repairedTimestamps,
       msgs,
     };
   }
@@ -344,12 +362,13 @@ const Parser = (() => {
     for (const { name, data } of payloads) {
       const kind = classify(data);
       if (kind === "conversations") {
-        let added = 0;
+        let added = 0, repaired = 0;
         for (const c of data) {
           const conv = normalizeConversation(c);
-          if (!byId.has(conv.id)) { byId.set(conv.id, conv); added++; }
+          if (!byId.has(conv.id)) { byId.set(conv.id, conv); added++; repaired += conv.repairedTimestamps; }
         }
-        report.push({ name, ok: true, info: `${added} Konversationen` });
+        report.push({ name, ok: true, info: `${added} Konversationen` +
+          (repaired ? ` · ${repaired} fehlerhafte Zeitstempel repariert` : "") });
       } else if (kind === "library") {
         let added = 0;
         for (const e of data) {
