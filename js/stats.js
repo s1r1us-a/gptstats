@@ -37,15 +37,14 @@ const Stats = (() => {
       String(d.getDate()).padStart(2, "0");
   }
 
-  function dateKeyNoonMs(key) {
-    return new Date(key + "T12:00:00").getTime();
+  function dayOrdinal(key) {
+    const [y, m, d] = key.split("-").map(Number);
+    return Date.UTC(y, m - 1, d) / 86400e3;
   }
 
   function calendarSpanDays(firstT, lastT) {
     if (firstT === null || lastT === null) return 0;
-    const first = dateKeyNoonMs(dateKey(firstT));
-    const last = dateKeyNoonMs(dateKey(lastT));
-    return Math.max(1, Math.round((last - first) / 86400e3) + 1);
+    return Math.max(1, dayOrdinal(dateKey(lastT)) - dayOrdinal(dateKey(firstT)) + 1);
   }
 
   function isoWeekLabel(t) {
@@ -68,6 +67,23 @@ const Stats = (() => {
     const s = [...arr].sort((a, b) => a - b);
     const mid = Math.floor(s.length / 2);
     return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  }
+
+  // Uhrzeiten liegen auf einem Kreis: 23:59 und 00:01 sind im Mittel
+  // Mitternacht, nicht Mittag. Bei exakt gegenläufigen Werten fällt die
+  // Funktion auf den Median zurück, weil der Kreis-Mittelwert undefiniert ist.
+  function circularMeanMinutes(values) {
+    if (!values.length) return 0;
+    let sin = 0, cos = 0;
+    for (const mins of values) {
+      const angle = mins / 1440 * Math.PI * 2;
+      sin += Math.sin(angle);
+      cos += Math.cos(angle);
+    }
+    if (Math.hypot(sin, cos) < 1e-9) return median(values);
+    let angle = Math.atan2(sin, cos);
+    if (angle < 0) angle += Math.PI * 2;
+    return angle / (Math.PI * 2) * 1440;
   }
 
   // Math.min(...arr) sprengt bei sehr großen Exporten den Call-Stack
@@ -166,17 +182,26 @@ const Stats = (() => {
   /* ═════════════ Hauptberechnung ═════════════ */
   function compute(model) {
     const convs = model.conversations;
-    const all = [];
-    for (const c of convs) for (const m of c.msgs) all.push({ m, c });
+    const raw = [];
+    for (const c of convs) for (const m of c.msgs) raw.push({ m, c });
 
-    const visible = all.filter(x => x.m.isVisible && x.m.t);
+    // Versteckte System-/Tool-Nachrichten dürfen weder Statistiken noch
+    // Reader-nahe Auswertungen beeinflussen.
+    const all = raw.filter(x => !x.m.isHidden);
+
+    // Hauptkennzahlen beziehen sich auf den sichtbaren Dialog. Tool-Events
+    // werden separat bei Medien und Websuche ausgewertet.
+    const visible = all.filter(x => x.m.isVisible && x.m.t &&
+      (x.m.role === "user" || x.m.role === "assistant"));
     const userMsgs = visible.filter(x => x.m.role === "user");
     const aiMsgs = visible.filter(x => x.m.role === "assistant");
 
     /* ── Überblick ─────────────────────────────────────── */
     const userWords = userMsgs.reduce((s, x) => s + x.m.words, 0);
     const aiWords = aiMsgs.reduce((s, x) => s + x.m.words, 0);
-    const totalChars = visible.reduce((s, x) => s + x.m.chars, 0);
+    const userChars = userMsgs.reduce((s, x) => s + x.m.chars, 0);
+    const aiChars = aiMsgs.reduce((s, x) => s + x.m.chars, 0);
+    const totalChars = userChars + aiChars;
 
     const times = visible.map(x => x.m.t);
     const firstT = times.length ? arrMin(times) : null;
@@ -190,7 +215,7 @@ const Stats = (() => {
     }
     const msgInfo = (x) => x ? { t: x.m.t, text: x.m.text, title: x.c.title } : null;
 
-    const activeDaySet = new Set(visible.map(x => dateKey(x.m.t)));
+    const activeDaySet = new Set(userMsgs.map(x => dateKey(x.m.t)));
     const spanDays = calendarSpanDays(firstT, lastT);
 
     const overview = {
@@ -198,12 +223,12 @@ const Stats = (() => {
       msgCount: visible.length,
       userCount: userMsgs.length,
       aiCount: aiMsgs.length,
-      userWords, aiWords,
+      userWords, aiWords, userChars, aiChars,
       totalWords: userWords + aiWords,
       estTokens: Math.round(totalChars / 4),
       firstT, lastT, spanDays,
       activeDays: activeDaySet.size,
-      avgMsgsPerActiveDay: visible.length / Math.max(1, activeDaySet.size),
+      avgMsgsPerActiveDay: userMsgs.length / Math.max(1, activeDaySet.size),
       avgConvsPerActiveDay: convs.length / Math.max(1, activeDaySet.size),
       avgMsgsPerConv: visible.length / Math.max(1, convs.length),
       reasoningEntries: all.filter(x => x.m.ct === "thoughts").length,
@@ -213,7 +238,7 @@ const Stats = (() => {
 
     /* ── Aktivität ─────────────────────────────────────── */
     const perDayMap = new Map();      // dateKey → {msgs, convs}
-    for (const x of visible) {
+    for (const x of userMsgs) {
       const k = dateKey(x.m.t);
       if (!perDayMap.has(k)) perDayMap.set(k, { msgs: 0, convs: 0 });
       perDayMap.get(k).msgs++;
@@ -226,13 +251,16 @@ const Stats = (() => {
     }
     // Lückenlose Tagesreihe von first bis last
     const perDay = [];
-    if (firstT !== null && lastT !== null) {
-      for (let d = new Date(firstT * 1000); ; d.setDate(d.getDate() + 1)) {
+    const userTimes = userMsgs.map(x => x.m.t);
+    const activityFirstT = userTimes.length ? arrMin(userTimes) : null;
+    const activityLastT = userTimes.length ? arrMax(userTimes) : null;
+    if (activityFirstT !== null && activityLastT !== null) {
+      for (let d = new Date(activityFirstT * 1000); ; d.setDate(d.getDate() + 1)) {
         const k = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" +
                   String(d.getDate()).padStart(2, "0");
         const e = perDayMap.get(k) || { msgs: 0, convs: 0 };
         perDay.push({ date: k, msgs: e.msgs, convs: e.convs });
-        if (k === dateKey(lastT)) break;
+        if (k === dateKey(activityLastT)) break;
         if (perDay.length > 5000) break; // Sicherheitsnetz
       }
     }
@@ -241,7 +269,7 @@ const Stats = (() => {
     const perWeekday = new Array(7).fill(0);
     const heat = Array.from({ length: 7 }, () => new Array(24).fill(0));
     const hourMap = new Map();   // "dateKey|hour" → Nachrichten in dieser Stunde
-    for (const x of visible) {
+    for (const x of userMsgs) {
       const d = new Date(x.m.t * 1000);
       perHour[d.getHours()]++;
       const wd = mondayIdx(x.m.t);
@@ -272,8 +300,8 @@ const Stats = (() => {
     const sortedDays = [...activeDaySet].sort();
     let longestStreak = 0, curStreak = 0, streakEnd = null, run = 0, prev = null;
     for (const k of sortedDays) {
-      const t = new Date(k + "T12:00:00").getTime();
-      run = (prev !== null && t - prev === 86400e3) ? run + 1 : 1;
+      const t = dayOrdinal(k);
+      run = (prev !== null && t - prev === 1) ? run + 1 : 1;
       if (run > longestStreak) { longestStreak = run; streakEnd = k; }
       prev = t;
     }
@@ -281,36 +309,35 @@ const Stats = (() => {
     {
       let r = 1;
       for (let i = sortedDays.length - 1; i > 0; i--) {
-        const a = new Date(sortedDays[i] + "T12:00:00").getTime();
-        const b = new Date(sortedDays[i - 1] + "T12:00:00").getTime();
-        if (a - b === 86400e3) r++; else break;
+        const a = dayOrdinal(sortedDays[i]);
+        const b = dayOrdinal(sortedDays[i - 1]);
+        if (a - b === 1) r++; else break;
       }
       curStreak = sortedDays.length ? r : 0;
     }
 
-    const nightMsgs = visible.filter(x => new Date(x.m.t * 1000).getHours() < 6).length;
-    const weekendMsgs = visible.filter(x => mondayIdx(x.m.t) >= 5).length;
+    const nightMsgs = userMsgs.filter(x => new Date(x.m.t * 1000).getHours() < 6).length;
+    const weekendMsgs = userMsgs.filter(x => mondayIdx(x.m.t) >= 5).length;
 
     // Ø erste/letzte Nachricht des Tages (Uhrzeit in Minuten)
     const firstOfDay = new Map(), lastOfDay = new Map();
-    for (const x of visible) {
+    for (const x of userMsgs) {
       const k = dateKey(x.m.t);
       const d = new Date(x.m.t * 1000);
       const mins = d.getHours() * 60 + d.getMinutes();
       if (!firstOfDay.has(k) || mins < firstOfDay.get(k)) firstOfDay.set(k, mins);
       if (!lastOfDay.has(k) || mins > lastOfDay.get(k)) lastOfDay.set(k, mins);
     }
-    const avg = (arr) => arr.reduce((s, v) => s + v, 0) / Math.max(1, arr.length);
-    const avgFirstMins = avg([...firstOfDay.values()]);
-    const avgLastMins = avg([...lastOfDay.values()]);
+    const avgFirstMins = circularMeanMinutes([...firstOfDay.values()]);
+    const avgLastMins = circularMeanMinutes([...lastOfDay.values()]);
 
     const activity = {
       perDay, perHour, perWeekday, heat,
       weekdayLabels: WEEKDAYS,
       busiestDay, longestStreak, streakEnd, curStreak,
       recordHour, recordConvsDay,
-      nightPct: nightMsgs / Math.max(1, visible.length) * 100,
-      weekendPct: weekendMsgs / Math.max(1, visible.length) * 100,
+      nightPct: nightMsgs / Math.max(1, userMsgs.length) * 100,
+      weekendPct: weekendMsgs / Math.max(1, userMsgs.length) * 100,
       avgFirstMins, avgLastMins,
       peakHour: perHour.indexOf(arrMax(perHour)),
       peakWeekday: WEEKDAYS[perWeekday.indexOf(arrMax(perWeekday))],
@@ -324,8 +351,13 @@ const Stats = (() => {
       modelMap.set(x.m.model, (modelMap.get(x.m.model) || 0) + 1);
       if (isThinkingModel(x.m.model)) thinkingMsgs++;
     }
-    const modelDist = topEntries(modelMap, 12)
+    const knownModelEntries = topEntries(modelMap, Math.max(1, modelMap.size));
+    const modelDist = knownModelEntries.slice(0, 6)
       .map(e => ({ slug: e.key, label: prettyModel(e.key), count: e.value }));
+    const otherModelCount = knownModelEntries.slice(6).reduce((s, e) => s + e.value, 0);
+    const unknownModelCount = aiMsgs.length - aiMsgs.filter(x => x.m.model).length;
+    if (otherModelCount) modelDist.push({ slug: "__other__", label: "Andere", count: otherModelCount });
+    if (unknownModelCount) modelDist.push({ slug: "__unknown__", label: "Unbekannt", count: unknownModelCount });
 
     const defaultMap = new Map();
     for (const c of convs) {
@@ -336,7 +368,7 @@ const Stats = (() => {
       .map(e => ({ slug: e.key, label: prettyModel(e.key), count: e.value }));
 
     // Modell-Familien pro Tag (Top 3 + Andere) für gestapelte Balken
-    const topSlugs = modelDist.slice(0, 3).map(d => d.slug);
+    const topSlugs = knownModelEntries.slice(0, 3).map(d => d.key);
     const famPerDay = new Map(); // dateKey → [n0, n1, n2, other]
     for (const x of aiMsgs) {
       if (!x.m.model) continue;
@@ -353,7 +385,9 @@ const Stats = (() => {
     const models = {
       dist: modelDist,
       withModel: aiMsgs.filter(x => x.m.model).length,
-      thinkingPct: thinkingMsgs / Math.max(1, aiMsgs.filter(x => x.m.model).length) * 100,
+      coveragePct: aiMsgs.filter(x => x.m.model).length / Math.max(1, aiMsgs.length) * 100,
+      unknownCount: unknownModelCount,
+      thinkingPct: clamp(thinkingMsgs / Math.max(1, aiMsgs.filter(x => x.m.model).length) * 100, 0, 100),
       defaultDist,
       perDaySeries: { labels: [...topSlugs.map(prettyModel), "Andere"], data: modelPerDay },
       distinctCount: modelMap.size,
@@ -371,7 +405,7 @@ const Stats = (() => {
     const buckets = [
       { label: "≤ 2s", min: 0, max: 2 }, { label: "3–5s", min: 3, max: 5 },
       { label: "6–10s", min: 6, max: 10 }, { label: "11–30s", min: 11, max: 30 },
-      { label: "31–60s", min: 31, max: 60 }, { label: "> 60s", min: 61, max: Infinity },
+      { label: "31–60s", min: 31, max: 60 }, { label: "> 60s", min: 61, max: Number.MAX_SAFE_INTEGER },
     ].map(b => ({ ...b, count: recapSecs.filter(s => s >= b.min && s <= b.max).length }));
 
     const thoughtsMsgs = all.filter(x => x.m.ct === "thoughts");
@@ -385,17 +419,19 @@ const Stats = (() => {
       buckets,
       thoughtsMsgCount: thoughtsMsgs.length,
       thoughtsWords: thoughtsMsgs.reduce((s, x) => s + x.m.thoughtsWords, 0),
-      sharePct: recaps.length / Math.max(1, aiMsgs.length) * 100,
+      sharePct: clamp(recaps.length / Math.max(1, aiMsgs.length) * 100, 0, 100),
     };
 
     /* ── Gespräche ─────────────────────────────────────── */
     const convStats = convs.map(c => {
-      const vis = c.msgs.filter(m => m.isVisible);
+      const vis = c.msgs.filter(m => !m.isHidden && m.isVisible &&
+        (m.role === "user" || m.role === "assistant"));
+      const visTimes = vis.map(m => m.t).filter(Boolean);
       return {
         id: c.id, title: c.title,
         msgs: vis.length,
         words: vis.reduce((s, m) => s + m.words, 0),
-        durationDays: c.updateTime && c.createTime ? (c.updateTime - c.createTime) / 86400 : 0,
+        durationDays: visTimes.length > 1 ? (arrMax(visTimes) - arrMin(visTimes)) / 86400 : 0,
         userMsgs: vis.filter(m => m.role === "user").length,
       };
     });
@@ -416,7 +452,7 @@ const Stats = (() => {
       voiceConvCount: convs.filter(c => c.voice).length,
       archivedCount: convs.filter(c => c.isArchived).length,
       starredCount: convs.filter(c => c.isStarred).length,
-      oneShot: convStats.filter(c => c.userMsgs <= 1).length,
+      oneShot: convStats.filter(c => c.userMsgs === 1).length,
       titleWords,
       avgAiWordsPerReply: aiWords / Math.max(1, aiMsgs.length),
       avgUserWordsPerMsg: userWords / Math.max(1, userMsgs.length),
@@ -474,22 +510,34 @@ const Stats = (() => {
 
     /* ── Websuche ──────────────────────────────────────── */
     const domainMap = new Map();
-    let searchMsgs = 0, totalCitations = 0;
+    let searchOperations = 0, answersWithSearch = 0, totalCitations = 0;
     const refTypeMap = new Map();
-    for (const x of all) {
-      if (x.m.searchGroups) {
-        searchMsgs++;
-        for (const g of x.m.searchGroups) {
+    for (const c of convs) {
+      let pendingSearch = false;
+      for (const m of c.msgs) {
+        if (m.isHidden) continue;
+        if (m.role === "user" && m.isVisible) pendingSearch = false;
+        if (m.searchGroups && m.searchGroups.length) {
+          searchOperations++;
+          pendingSearch = true;
+          for (const g of m.searchGroups) {
           domainMap.set(g.domain, (domainMap.get(g.domain) || 0) + Math.max(1, g.entries));
           totalCitations += g.entries;
+          }
+        }
+        for (const t of m.refTypes) refTypeMap.set(t, (refTypeMap.get(t) || 0) + 1);
+        if (m.role === "assistant" && m.isVisible && m.t) {
+          if (pendingSearch) answersWithSearch++;
+          pendingSearch = false;
         }
       }
-      for (const t of x.m.refTypes) refTypeMap.set(t, (refTypeMap.get(t) || 0) + 1);
     }
 
     const web = {
-      searchMsgs,
-      searchSharePct: searchMsgs / Math.max(1, aiMsgs.length) * 100,
+      searchMsgs: answersWithSearch,
+      answersWithSearch,
+      searchOperations,
+      searchSharePct: clamp(answersWithSearch / Math.max(1, aiMsgs.length) * 100, 0, 100),
       totalCitations,
       uniqueDomains: domainMap.size,
       topDomains: topEntries(domainMap, 15),
@@ -555,26 +603,30 @@ const Stats = (() => {
     }
 
     // Nachricht am tiefsten in der Nacht (nächste an 3:30 Uhr)
-    let latestNight = { t: null, dist: Infinity };
-    for (const x of visible) {
+    let latestNight = { t: null, dist: 0 };
+    let latestNightBestDist = Infinity;
+    for (const x of userMsgs) {
       const d = new Date(x.m.t * 1000);
       const h = d.getHours() + d.getMinutes() / 60;
       const dist = Math.min(Math.abs(h - 3.5), 24 - Math.abs(h - 3.5));
-      if (dist < latestNight.dist) latestNight = { t: x.m.t, dist };
+      if (dist < latestNightBestDist) {
+        latestNightBestDist = dist;
+        latestNight = { t: x.m.t, dist };
+      }
     }
 
     // Längste Pause zwischen zwei aktiven Tagen
     let longestBreak = { days: 0, from: null, to: null };
     for (let i = 1; i < sortedDays.length; i++) {
-      const a = new Date(sortedDays[i - 1] + "T12:00:00").getTime();
-      const b = new Date(sortedDays[i] + "T12:00:00").getTime();
-      const free = Math.round((b - a) / 86400e3) - 1;
+      const a = dayOrdinal(sortedDays[i - 1]);
+      const b = dayOrdinal(sortedDays[i]);
+      const free = b - a - 1;
       if (free > longestBreak.days) longestBreak = { days: free, from: sortedDays[i - 1], to: sortedDays[i] };
     }
 
     // Aktivste Kalenderwoche
     const weekMap = new Map();
-    for (const x of visible) {
+    for (const x of userMsgs) {
       const key = isoWeekLabel(x.m.t);
       weekMap.set(key, (weekMap.get(key) || 0) + 1);
     }
@@ -586,29 +638,32 @@ const Stats = (() => {
       longestSession, latestNight, longestBreak, busiestWeek,
     };
 
-    /* ── Ökobilanz (Umwelt-Fußabdruck) ─────────────────────
-       Der ChatGPT-Export enthält KEINE echten Token-/Energiewerte.
-       Wir schätzen daher über die Kette: geschätzte Tokens →
-       Energie → (Wasser & CO₂). Alle Faktoren sind belegt und hier
-       zentral als anpassbare Konstanten definiert.                */
+    /* ── Datenqualität & Abdeckung ───────────────────────── */
+    const visibleAssistantMessages = all.filter(x => x.m.isVisible && x.m.role === "assistant");
+    const quality = {
+      hiddenMessagesExcluded: raw.filter(x => x.m.isHidden).length,
+      skippedAlternativeMessages: convs.reduce((s, c) => s + (c.skippedAltMsgs || 0), 0),
+      repairedTimestamps: convs.reduce((s, c) => s + (c.repairedTimestamps || 0), 0),
+      missingTimestamps: all.filter(x => x.m.isVisible && !x.m.t &&
+        (x.m.role === "user" || x.m.role === "assistant")).length,
+      assistantModelCoveragePct: visibleAssistantMessages.filter(x => x.m.model).length /
+        Math.max(1, visibleAssistantMessages.length) * 100,
+      assistantWithoutModel: visibleAssistantMessages.filter(x => !x.m.model).length,
+    };
+
+    /* ── Umwelt-Benchmarks & Szenarien ──────────────────────
+       Der ChatGPT-Export enthält KEINE Messwerte für Tokens, Energie,
+       Wasser oder CO₂. Anbieter- und Studienwerte bleiben deshalb
+       getrennte Benchmarks; sie werden nicht als tatsächlicher Verbrauch
+       dieses Exports ausgegeben.                                   */
     const IMPACT = {
-      // Ø-Query ≈ 0,34 Wh (Altman 2025). Bei ~485 sichtbaren Tokens
-      // ergibt das als grobe Text-Inferenz-Schätzung ~0,7 Wh je 1000 Tokens.
-      ENERGY_WH_PER_1K_TOKENS: 0.7,
-      // Wiederverwendeter Gesprächskontext ist nicht im Export messbar.
-      // Wir zählen ihn klein gewichtet mit, statt ihn komplett zu ignorieren.
-      CONTEXT_REUSE_WEIGHT: 0.1,
-      CONTEXT_TOKEN_CAP: 16000,
-      // Reasoning-Modelle (o3, *-thinking) verbrauchen ein Vielfaches.
-      // Ohne echte Tokenwerte nutzen wir Denkzeit nur als begrenzten Proxy.
-      REASONING_DEFAULT_MULTIPLIER: 8,
-      REASONING_MIN_MULTIPLIER: 4,
-      REASONING_MAX_MULTIPLIER: 24,
-      // Wasser hängt stark vom Standort ab. Der Mittelwert nutzt die Mitte
-      // der OECD-Spanne 1,8–12 L/kWh; Altman nennt für Ø-Queries 0,000085 gal
-      // Wasser bei 0,34 Wh, also ~0,95 L/kWh als sehr niedrigen Vergleich.
-      WATER_ML_PER_WH: 6.9,
-      WATER_ML_PER_WH_LOW: 0.95,
+      // Sam Altman (2025): durchschnittliche ChatGPT-Anfrage. Die Quelle
+      // veröffentlicht keine Modell-/Token-Aufschlüsselung.
+      AVG_CHATGPT_QUERY_WH: 0.34,
+      AVG_CHATGPT_QUERY_WATER_ML: 0.000085 * 3785.411784,
+      // OECD.AI: standortabhängige Spanne über Microsoft-Rechenzentren.
+      // Kein Mittelwert; ausschließlich als separates Standort-Szenario.
+      WATER_ML_PER_WH_LOW: 1.8,
       WATER_ML_PER_WH_HIGH: 12,
       // Strommix: IEA global 2024 ~445 g CO₂/kWh; UBA Deutschland 2025
       // ~344 g CO₂/kWh. Wir zeigen global als Default und DE als Vergleich.
@@ -620,7 +675,6 @@ const Stats = (() => {
       WATER_L_AVOCADO: 320,     // 170 g à ~1.980 L/kg
       WATER_L_COFFEE_CUP: 132,  // pro Tasse
       CO2_G_COFFEE_CUP: 258,    // CDP: 12 oz schwarzer Kaffee ≈ 0,258 kg CO₂e
-      AVG_CHATGPT_QUERY_WH: 0.34,
       STREAMING_VIDEO_WH_PER_HOUR: 77, // IEA: ~0,077 kWh je Stunde Streaming
       SHOWER_L_PER_MIN: 9.46,    // EPA: Standard-Duschkopf 2,5 gal/min
       TOILET_L_PER_FLUSH: 4.85,  // EPA WaterSense: 1,28 gal/Spülung
@@ -650,33 +704,17 @@ const Stats = (() => {
       e.wh += wh; e.replies += replies;
       monthMap.set(mk, e);
     };
-    let energyWh = 0, reasoningEnergyWh = 0, imageGenWh = 0;
-    let promptTokens = 0, outputTokens = 0, contextTokens = 0, weightedTokens = 0, measuredReplies = 0;
+    let energyWh = 0, imageGenWh = 0, benchmarkReplies = 0;
+    let promptTokens = 0, outputTokens = 0;
     const tokenEstimate = (chars) => chars / 4;
-    const reasoningMultiplier = (sec) => {
-      if (sec === null || sec === undefined) return IMPACT.REASONING_DEFAULT_MULTIPLIER;
-      return clamp(
-        IMPACT.REASONING_MIN_MULTIPLIER + Math.sqrt(Math.max(0, sec)) * 1.6,
-        IMPACT.REASONING_MIN_MULTIPLIER,
-        IMPACT.REASONING_MAX_MULTIPLIER
-      );
-    };
 
     for (const c of convs) {
-      let pendingPromptTokens = 0;
-      let visibleContextTokens = 0;
-      let lastRecapSec = null;
       for (const m of c.msgs) {
-        if (m.ct === "reasoning_recap" && m.recap) {
-          lastRecapSec = m.recap.sec;
-          continue;
-        }
-        if (!m.isVisible || !m.t) continue;
+        if (m.isHidden || !m.isVisible || !m.t) continue;
 
         const msgTokens = tokenEstimate(m.chars);
         if (m.role === "user") {
-          pendingPromptTokens += msgTokens;
-          visibleContextTokens += msgTokens;
+          promptTokens += msgTokens;
           continue;
         }
 
@@ -692,33 +730,20 @@ const Stats = (() => {
           energyMap.set(imgSlug, (energyMap.get(imgSlug) || 0) + imgWh);
         }
 
-        if (m.role !== "assistant") {
-          visibleContextTokens += msgTokens;
-          continue;
-        }
+        if (m.role !== "assistant") continue;
 
-        const outTokens = msgTokens;
-        const priorContextTokens = Math.max(0, visibleContextTokens - pendingPromptTokens);
-        const contextEstimate = Math.min(priorContextTokens, IMPACT.CONTEXT_TOKEN_CAP) * IMPACT.CONTEXT_REUSE_WEIGHT;
-        const thinking = isThinkingModel(m.model);
-        const multiplier = thinking ? reasoningMultiplier(lastRecapSec) : 1;
-        const countedTokens = pendingPromptTokens + outTokens + contextEstimate;
-        const wh = (countedTokens / 1000) * IMPACT.ENERGY_WH_PER_1K_TOKENS * multiplier;
+        // Separates Benchmark-Szenario: jede sichtbare KI-Antwort wird mit
+        // Altmans Anbieter-Durchschnitt angesetzt. Länge, Kontext, Cache und
+        // Reasoning werden nicht erfunden, weil sie im Export unbeobachtbar sind.
+        const wh = IMPACT.AVG_CHATGPT_QUERY_WH;
 
         energyWh += wh;
-        if (thinking) reasoningEnergyWh += wh;
         addMonthWh(m.t, wh, 1);
-        promptTokens += pendingPromptTokens;
-        outputTokens += outTokens;
-        contextTokens += contextEstimate;
-        weightedTokens += countedTokens * multiplier;
-        measuredReplies++;
+        outputTokens += msgTokens;
+        benchmarkReplies++;
 
         const slug = m.model || "unbekannt";
         energyMap.set(slug, (energyMap.get(slug) || 0) + wh);
-        visibleContextTokens += outTokens;
-        pendingPromptTokens = 0;
-        lastRecapSec = null;
       }
     }
     const energyByModel = topEntries(energyMap, 10)
@@ -729,10 +754,12 @@ const Stats = (() => {
       .map(([key, v]) => ({
         key, wh: v.wh, replies: v.replies,
         co2g: v.wh * IMPACT.CO2_G_PER_WH,
-        waterMl: v.wh * IMPACT.WATER_ML_PER_WH,
+        waterMl: v.replies * IMPACT.AVG_CHATGPT_QUERY_WATER_ML,
       }));
 
-    const waterMl = energyWh * IMPACT.WATER_ML_PER_WH;
+    // Anbieter-Wasserbenchmark und standortabhängiges Energieszenario bleiben
+    // bewusst getrennt; die OECD-Spanne besitzt keinen belastbaren Mittelpunkt.
+    const waterMl = benchmarkReplies * IMPACT.AVG_CHATGPT_QUERY_WATER_ML;
     const waterMlLow = energyWh * IMPACT.WATER_ML_PER_WH_LOW;
     const waterMlHigh = energyWh * IMPACT.WATER_ML_PER_WH_HIGH;
     const co2g = energyWh * IMPACT.CO2_G_PER_WH;
@@ -743,14 +770,15 @@ const Stats = (() => {
 
     const impact = {
       energyWh, waterMl, waterMlLow, waterMlHigh, co2g, co2gGermany,
-      promptTokens, outputTokens, contextTokens, weightedTokens, measuredReplies,
+      promptTokens, outputTokens,
+      visibleTextTokens: promptTokens + outputTokens,
+      contextTokens: null,
+      benchmarkReplies,
       energyByModel, byMonth,
       imageGenWh,
       imageGenPct: energyWh > 0 ? imageGenWh / energyWh * 100 : 0,
-      // Alternative Sicht inkl. Training & Hardware (Mistral-LCA 2025),
-      // bezogen auf die Antwort-Tokens — bewusst ohne Reasoning-Gewichtung.
+      // Externer Mistral-Le-Chat-Lebenszyklusbenchmark, nicht ChatGPT.
       co2gLifecycle: outputTokens / 1000 * IMPACT.LCA_CO2_G_PER_1K_TOKENS,
-      reasoningEnergyPct: energyWh > 0 ? reasoningEnergyWh / energyWh * 100 : 0,
       // greifbare Vergleiche
       bottles: waterMl / 500,                        // 0,5-L-Flaschen
       steaks: waterL / IMPACT.WATER_L_STEAK,
@@ -763,7 +791,7 @@ const Stats = (() => {
       streamingHours: energyWh / IMPACT.STREAMING_VIDEO_WH_PER_HOUR,
       avgQueryEquiv: energyWh / IMPACT.AVG_CHATGPT_QUERY_WH,
       geminiQueryEquiv: energyWh / IMPACT.GEMINI_PROMPT_WH,
-      avgWhPerReply: energyWh / Math.max(1, measuredReplies),
+      avgWhPerReply: energyWh / Math.max(1, benchmarkReplies),
       treeDays: co2g / (IMPACT.TREE_CO2_KG_PER_YEAR * 1000 / 365),
       evKm: energyWh / 160,                          // ~160 Wh/km E-Auto
       showerMinutes: waterL / IMPACT.SHOWER_L_PER_MIN,
@@ -774,7 +802,7 @@ const Stats = (() => {
       pedelecKm: co2g / IMPACT.CO2_G_PER_PKM_PEDELEC,
     };
 
-    return { overview, activity, models, reasoning, conversations, media, web, texts, fun, impact };
+    return { overview, activity, models, reasoning, conversations, media, web, texts, fun, quality, impact };
   }
 
   return { compute, prettyModel, dateKey };

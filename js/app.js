@@ -60,7 +60,7 @@
     return "< 0,001";
   }
 
-  const impactFootprint = (I) => "Wasser: " + fmtWater(I.waterMl) + " · CO₂: " + fmtCo2(I.co2g);
+  const impactFootprint = (I) => "Benchmark: Wasser " + fmtWater(I.waterMl) + " · CO₂-Szenario " + fmtCo2(I.co2g);
   const withFootprint = (I, s) => s + " · " + impactFootprint(I);
 
   function fmtDur(sec) {
@@ -70,8 +70,11 @@
     return sec + " s";
   }
 
-  const fmtClock = (mins) =>
-    String(Math.floor(mins / 60)).padStart(2, "0") + ":" + String(Math.round(mins % 60)).padStart(2, "0");
+  const fmtClock = (mins) => {
+    const rounded = ((Math.round(mins) % 1440) + 1440) % 1440;
+    return String(Math.floor(rounded / 60)).padStart(2, "0") + ":" +
+      String(rounded % 60).padStart(2, "0");
+  };
 
   function fmtDate(ts) {
     return new Date(ts * 1000).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" });
@@ -87,6 +90,7 @@
   }
 
   function fmtDateKey(key, long) {
+    if (!key) return "—";
     const d = new Date(key + "T12:00:00");
     return long
       ? d.toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "long" })
@@ -191,8 +195,8 @@
     [
       { num: o.msgCount, lbl: "Nachrichten" },
       { num: o.totalWords, lbl: "Wörter gewechselt" },
-      { num: o.estTokens, lbl: "≈ Tokens" },
-      { num: o.avgMsgsPerActiveDay, lbl: "Nachrichten pro Tag", fmt: fmt1 },
+      { num: o.estTokens, lbl: "≈ sichtbare Text-Tokens" },
+      { num: o.avgMsgsPerActiveDay, lbl: "Eigene Nachrichten pro Tag", fmt: fmt1 },
     ].forEach((h) => {
       const div = document.createElement("div");
       div.className = "hero-num";
@@ -220,6 +224,14 @@
       { num: o.reasoningEntries, lbl: "Denkprozesse", sub: "sichtbare Gedankengänge der KI" },
       { num: o.spanDays, lbl: "Tage Zeitraum", sub: `davon ${o.activeDays} aktiv (${fmtPct(o.activeDays / o.spanDays * 100)})` },
     ];
+    const q = S.quality;
+    cards.push({ num: q.assistantModelCoveragePct, fmt: fmtPct, lbl: "Modell-Abdeckung", sub: `${fmtInt(q.assistantWithoutModel)} KI-Antworten ohne Modell`, accent: "indigo" });
+    if (q.hiddenMessagesExcluded) cards.push({ num: q.hiddenMessagesExcluded, lbl: "Versteckte Nachrichten ausgeschlossen", accent: "green" });
+    if (q.skippedAlternativeMessages) cards.push({ num: q.skippedAlternativeMessages, lbl: "Alternative Zweige verworfen", accent: "orange" });
+    if (q.repairedTimestamps || q.missingTimestamps) cards.push({
+      val: `${fmtInt(q.repairedTimestamps)} / ${fmtInt(q.missingTimestamps)}`,
+      lbl: "Zeitstempel repariert / fehlend", accent: "yellow",
+    });
     if (o.firstMsg) cards.push({
       val: fmtDate(o.firstMsg.t), lbl: "Deine allererste Nachricht",
       sub: `„${esc(snippet(o.firstMsg.text, 130))}“ — um ${msgTime(o.firstMsg)} Uhr`,
@@ -236,10 +248,10 @@
   function renderActivity(S) {
     const a = S.activity;
     fillGrid("grid-aktivitaet", [
-      { val: fmtDateKey(a.busiestDay.date, true), lbl: "Aktivster Tag", sub: fmtInt(a.busiestDay.msgs) + " Nachrichten", accent: "orange" },
+      { val: fmtDateKey(a.busiestDay.date, true), lbl: "Aktivster Tag", sub: fmtInt(a.busiestDay.msgs) + " eigene Nachrichten", accent: "orange" },
       { num: a.longestStreak, fmt: (n) => fmtInt(n) + '<span class="unit">Tage</span>', lbl: "Längste Serie", sub: "tägliche Nutzung am Stück", accent: "pink" },
       { val: a.peakWeekday + ", " + a.peakHour + "–" + (a.peakHour + 1) + " Uhr", lbl: "Deine Prime-Time", accent: "purple" },
-      { num: a.nightPct, fmt: fmtPct, lbl: "Nachteulen-Quote", sub: "Nachrichten zwischen 0 und 6 Uhr", accent: "indigo" },
+      { num: a.nightPct, fmt: fmtPct, lbl: "Nachteulen-Quote", sub: "deine Nachrichten zwischen 0 und 6 Uhr", accent: "indigo" },
       { num: a.weekendPct, fmt: fmtPct, lbl: "Wochenend-Anteil", accent: "teal" },
       { val: fmtClock(a.avgFirstMins), lbl: "Ø erste Nachricht", sub: "Tagesstart mit ChatGPT", accent: "green" },
       { val: fmtClock(a.avgLastMins), lbl: "Ø letzte Nachricht", sub: "so endet dein ChatGPT-Tag", accent: "blue" },
@@ -251,20 +263,20 @@
     ]);
 
     const c = "charts-aktivitaet";
-    Charts.area(chartCard(c, "Verlauf", "Nachrichten & neue Gespräche pro Tag", true), {
+    Charts.area(chartCard(c, "Verlauf", "deine Nachrichten & neue Gespräche pro Tag", true), {
       labels: a.perDay.map(d => fmtDateKey(d.date)),
       tipLabel: (i) => fmtDateKey(a.perDay[i].date, true),
       series: [
-        { name: "Nachrichten", color: Charts.PALETTE[0], values: a.perDay.map(d => d.msgs) },
+        { name: "Deine Nachrichten", color: Charts.PALETTE[0], values: a.perDay.map(d => d.msgs) },
         { name: "Neue Gespräche", color: Charts.PALETTE[2], values: a.perDay.map(d => d.convs) },
       ],
       aria: `Liniendiagramm: Nachrichten und neue Gespräche pro Tag, Spitzenwert ${fmtInt(a.busiestDay.msgs)} Nachrichten am ${fmtDateKey(a.busiestDay.date, true)}`,
     });
-    Charts.bars(chartCard(c, "Wochentage", "Nachrichten je Wochentag"), {
+    Charts.bars(chartCard(c, "Wochentage", "deine Nachrichten je Wochentag"), {
       labels: a.weekdayLabels, values: a.perWeekday, color: Charts.PALETTE[1], height: 210,
       aria: `Balkendiagramm: Nachrichten je Wochentag, am meisten am ${a.peakWeekday}`,
     });
-    Charts.bars(chartCard(c, "Uhrzeiten", "Nachrichten je Stunde"), {
+    Charts.bars(chartCard(c, "Uhrzeiten", "deine Nachrichten je Stunde"), {
       labels: [...Array(24).keys()].map(String), values: a.perHour, color: Charts.PALETTE[4], height: 210,
       tipLabel: (i) => i + "–" + (i + 1) + " Uhr",
       aria: `Balkendiagramm: Nachrichten je Stunde, am meisten zwischen ${a.peakHour} und ${a.peakHour + 1} Uhr`,
@@ -286,11 +298,12 @@
       { num: m.thinkingPct, fmt: fmtPct, lbl: "Thinking-Anteil", sub: "Antworten von Reasoning-Modellen", accent: "purple" },
       { val: m.dist[0] ? esc(m.dist[0].label) : "—", lbl: "Meistgenutztes Modell", sub: m.dist[0] ? fmtInt(m.dist[0].count) + " Antworten" : "", accent: "pink" },
       { num: m.autoStartPct, fmt: fmtPct, lbl: "Start im Auto-Modus", sub: "du lässt ChatGPT das Modell wählen", accent: "teal" },
+      { num: m.coveragePct, fmt: fmtPct, lbl: "Modell-Abdeckung", sub: fmtInt(m.unknownCount) + " Antworten unbekannt", accent: "indigo" },
     ]);
 
     const c = "charts-modelle";
     Charts.donut(chartCard(c, "Modell-Verteilung", "welches Modell deine Antworten geschrieben hat"), {
-      items: m.dist.slice(0, 7).map(d => ({ label: d.label, value: d.count })),
+      items: m.dist.map(d => ({ label: d.label, value: d.count })),
       centerLabel: "Antworten",
       aria: "Ringdiagramm: Verteilung der KI-Antworten nach Modell" + (m.dist[0] ? `, am häufigsten ${m.dist[0].label}` : ""),
     });
@@ -466,7 +479,8 @@
   function renderWeb(S) {
     const w = S.web;
     fillGrid("grid-websuche", [
-      { num: w.searchMsgs, lbl: "Antworten mit Websuche", sub: fmtPct(w.searchSharePct) + " aller KI-Antworten", accent: "blue" },
+      { num: w.answersWithSearch, lbl: "Antworten mit Websuche", sub: fmtPct(w.searchSharePct) + " aller KI-Antworten", accent: "blue" },
+      { num: w.searchOperations, lbl: "Einzelne Suchschritte", sub: "mehrere pro Antwort möglich", accent: "teal" },
       { num: w.totalCitations, lbl: "Zitierte Quellen", accent: "indigo" },
       { num: w.uniqueDomains, lbl: "Verschiedene Domains", accent: "purple" },
       { val: w.topDomains[0] ? esc(w.topDomains[0].key) : "—", lbl: "Top-Quelle", sub: w.topDomains[0] ? fmtInt(w.topDomains[0].value) + " Zitate" : "", accent: "pink" },
@@ -568,14 +582,15 @@
     const I = S.impact;
 
     const resourceCards = [
-      { num: I.waterMl, fmt: fmtWater, lbl: "Wasser verbraucht", sub: "Spanne: " + fmtWater(I.waterMlLow) + "–" + fmtWater(I.waterMlHigh) + " · CO₂: " + fmtCo2(I.co2g), accent: "teal" },
-      { num: I.energyWh, fmt: fmtEnergy, lbl: "Strom verbraucht", sub: withFootprint(I, "≈ " + fmtCompare(I.phoneCharges) + " Handy-Ladungen"), accent: "green" },
-      { num: I.co2g, fmt: fmtCo2, lbl: "CO₂ ausgestoßen", sub: "globaler Mix · DE 2025: " + fmtCo2(I.co2gGermany), accent: "blue" },
-      { num: I.co2gLifecycle, fmt: fmtCo2, lbl: "CO₂ inkl. Lebenszyklus", sub: "Mistral-LCA 2025: ≈ 2,85 g je 1.000 Antwort-Tokens inkl. Training & Hardware", accent: "purple" },
-      { num: I.weightedTokens, fmt: fmtInt, lbl: "gewichtete Text-Tokens", sub: withFootprint(I, "Prompt + Antwort + Kontext + Reasoning"), accent: "indigo" },
+      { num: I.waterMl, fmt: fmtWater, lbl: "ChatGPT-Ø-Wasserbenchmark", sub: "Antworten × 0,000085 gal · keine Messung dieses Exports", accent: "teal" },
+      { val: fmtWater(I.waterMlLow) + "–" + fmtWater(I.waterMlHigh), lbl: "Standort-Wasserszenario", sub: "1,8–12 L/kWh · kein Mittelwert", accent: "blue" },
+      { num: I.energyWh, fmt: fmtEnergy, lbl: "Energie-Benchmark-Szenario", sub: "Antworten × 0,34 Wh + separate Bild-Benchmarks", accent: "green" },
+      { num: I.co2g, fmt: fmtCo2, lbl: "CO₂ beim globalen Strommix 2024", sub: "wenn mit 445 g CO₂/kWh betrieben · DE 2025: " + fmtCo2(I.co2gGermany), accent: "blue" },
+      { num: I.co2gLifecycle, fmt: fmtCo2, lbl: "Externer Mistral-LCA-Benchmark", sub: "sichtbare Antwort-Tokens × 2,85 g/1.000 · nicht ChatGPT", accent: "purple" },
+      { num: I.visibleTextTokens, fmt: fmtInt, lbl: "≈ sichtbare Text-Tokens", sub: "Zeichen ÷ 4 · System, Tools, Kontext und Reasoning unbekannt", accent: "indigo" },
     ];
     if (I.imageGenWh > 0) resourceCards.push(
-      { num: I.imageGenWh, fmt: fmtEnergy, lbl: "davon Bildgenerierung", sub: fmtPct(I.imageGenPct) + " des Stroms · Luccioni et al. 2024: ≈ 2,9 Wh je KI-Bild", accent: "orange" }
+      { num: I.imageGenWh, fmt: fmtEnergy, lbl: "SDXL-Bild-Benchmark", sub: fmtPct(I.imageGenPct) + " des kombinierten Szenarios · nicht DALL·E/GPT Image", accent: "orange" }
     );
     fillGrid("grid-oeko", resourceCards);
 
@@ -608,12 +623,12 @@
     ]);
 
     Charts.hbars(
-      chartCard("charts-oeko", "Energie nach Modell", "geschätzter Stromverbrauch je Modell — Reasoning-Modelle wiegen schwerer", true),
+      chartCard("charts-oeko", "Benchmark-Energie nach Modell", "Antwortzahl × 0,34 Wh; Bilder separat als SDXL-Benchmark", true),
       {
         items: I.energyByModel.map(m => ({ label: m.label, value: m.wh })),
         palette: true,
         valueFmt: fmtEnergy,
-        aria: "Ranking: geschätzter Energieverbrauch je Modell" + (I.energyByModel[0] ? `, Platz 1: ${I.energyByModel[0].label}` : ""),
+        aria: "Ranking: Energie-Benchmark-Szenario je Modell" + (I.energyByModel[0] ? `, Platz 1: ${I.energyByModel[0].label}` : ""),
       }
     );
   }
@@ -696,7 +711,7 @@
     document.querySelectorAll(".c-item").forEach(i => i.classList.toggle("active", i.dataset.id === id));
     $("convTitle").textContent = c.title;
     renderMessages(c);
-    const item = document.querySelector(`.c-item[data-id="${id}"]`);
+    const item = [...document.querySelectorAll(".c-item")].find(i => i.dataset.id === id);
     if (item) item.scrollIntoView({ block: "nearest" });
   }
 

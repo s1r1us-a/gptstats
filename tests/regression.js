@@ -3,6 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
+process.env.TZ = "Europe/Berlin";
+
 const ROOT = path.resolve(__dirname, "..");
 
 function loadGlobal(file, name) {
@@ -23,6 +25,28 @@ function msg(role, t, text, metadata = {}) {
     create_time: t,
     content: { content_type: "text", parts: [text] },
     metadata,
+  };
+}
+
+function conversationFromMessages(id, messages, extra = {}) {
+  const mapping = { root: { id: "root", parent: null, children: messages.length ? ["m0"] : [], message: null } };
+  messages.forEach((message, i) => {
+    const nodeId = `m${i}`;
+    mapping[nodeId] = {
+      id: nodeId,
+      parent: i ? `m${i - 1}` : "root",
+      children: i + 1 < messages.length ? [`m${i + 1}`] : [],
+      message,
+    };
+  });
+  return {
+    conversation_id: id,
+    title: id,
+    create_time: extra.create_time || (messages[0] && messages[0].create_time) || 1,
+    update_time: extra.update_time || (messages[messages.length - 1] && messages[messages.length - 1].create_time) || 1,
+    current_node: messages.length ? `m${messages.length - 1}` : "root",
+    mapping,
+    ...extra,
   };
 }
 
@@ -57,8 +81,8 @@ assert.strictEqual(model.conversations[0].skippedAltMsgs, 1);
 const stats = Stats.compute(model);
 assert.strictEqual(stats.overview.msgCount, 2);
 assert.strictEqual(stats.overview.aiWords, 2);
-assert.ok(stats.impact.waterMlLow < stats.impact.waterMl);
-assert.ok(stats.impact.waterMl < stats.impact.waterMlHigh);
+assert.ok(stats.impact.waterMl >= 0, "ChatGPT-Wasserbenchmark ist nicht negativ");
+assert.ok(stats.impact.waterMlLow <= stats.impact.waterMlHigh, "Standort-Szenariogrenzen sind konsistent");
 assert.ok(stats.impact.co2gGermany < stats.impact.co2g);
 
 const rootCurrentConversation = {
@@ -223,5 +247,134 @@ assertJsonEqual(Parser.parseRecapSeconds("Nachgedacht fuer 2 Minuten"), { sec: 1
 assertJsonEqual(Parser.parseRecapSeconds("Thought for 2 minutes"), { sec: 120, estimated: false });
 assertJsonEqual(Parser.parseRecapSeconds("Nachgedacht fuer 1m 30s"), { sec: 90, estimated: false });
 assertJsonEqual(Parser.parseRecapSeconds("Thought for 1 hour 2 minutes 3 seconds"), { sec: 3723, estimated: false });
+
+/* ── Versteckte/interne Nachrichten & robuste Parts ─────── */
+
+const hiddenMeta = { is_visually_hidden_from_conversation: true };
+const hiddenConversation = conversationFromMessages("hidden", [
+  msg("user", T_MAY_27, "sichtbar"),
+  msg("tool", T_MAY_27 + 1, "VERSTECKT ".repeat(100), hiddenMeta),
+  msg("assistant", T_MAY_27 + 2, "Antwort", { model_slug: "gpt-4o" }),
+]);
+const hiddenModel = Parser.buildModel([{ name: "hidden.json", data: [hiddenConversation] }]);
+assert.strictEqual(hiddenModel.conversations[0].msgs[1].isHidden, true);
+assert.strictEqual(hiddenModel.conversations[0].msgs[1].isVisible, false);
+const hiddenStats = Stats.compute(hiddenModel);
+assert.strictEqual(hiddenStats.overview.msgCount, 2, "versteckte Tool-Nachricht zählt nicht");
+assert.strictEqual(hiddenStats.overview.estTokens, Math.round((8 + 7) / 4));
+assert.strictEqual(hiddenStats.quality.hiddenMessagesExcluded, 1);
+
+const malformed = msg("user", T_MAY_27, "ignored");
+malformed.content.parts = { not: "an array" };
+const malformedModel = Parser.buildModel([{ name: "malformed.json", data: [conversationFromMessages("malformed", [malformed])] }]);
+assert.strictEqual(malformedModel.conversations[0].msgs[0].isVisible, false, "ungültige parts werfen nicht und bleiben unsichtbar");
+
+/* ── Sommer-/Winterzeit: Kalendertage statt Millisekunden ─ */
+
+function twoDayStreak(id, first, second) {
+  return Stats.compute(Parser.buildModel([{ name: id + ".json", data: [conversationFromMessages(id, [
+    msg("user", Date.parse(first) / 1000, "Tag eins"),
+    msg("assistant", Date.parse(first) / 1000 + 1, "Antwort", { model_slug: "gpt-4o" }),
+    msg("user", Date.parse(second) / 1000, "Tag zwei"),
+    msg("assistant", Date.parse(second) / 1000 + 1, "Antwort", { model_slug: "gpt-4o" }),
+  ])] }])).activity;
+}
+
+const springStreak = twoDayStreak("spring-dst", "2026-03-28T12:00:00+01:00", "2026-03-29T12:00:00+02:00");
+const fallStreak = twoDayStreak("fall-dst", "2026-10-24T12:00:00+02:00", "2026-10-25T12:00:00+01:00");
+assert.strictEqual(springStreak.longestStreak, 2);
+assert.strictEqual(springStreak.curStreak, 2);
+assert.strictEqual(fallStreak.longestStreak, 2);
+assert.strictEqual(fallStreak.curStreak, 2);
+
+/* ── Websuche: Operationen und Antworten getrennt ───────── */
+
+const searchMeta = (domain) => ({ search_result_groups: [{ domain, entries: [{ url: `https://${domain}/x` }] }] });
+const webConversation = conversationFromMessages("web-multi", [
+  msg("user", T_MAY_27, "suche"),
+  msg("tool", T_MAY_27 + 1, "search one", searchMeta("one.example")),
+  msg("tool", T_MAY_27 + 2, "search two", searchMeta("two.example")),
+  msg("assistant", T_MAY_27 + 3, "Ergebnis", { model_slug: "gpt-4o" }),
+]);
+const webStats = Stats.compute(Parser.buildModel([{ name: "web.json", data: [webConversation] }])).web;
+assert.strictEqual(webStats.searchOperations, 2);
+assert.strictEqual(webStats.answersWithSearch, 1);
+assert.strictEqual(webStats.searchSharePct, 100);
+
+/* ── Nutzeraktivität & zyklische Uhrzeiten ──────────────── */
+
+const midnightSplit = conversationFromMessages("midnight-split", [
+  msg("user", Date.parse("2026-01-01T23:59:00+01:00") / 1000, "spät"),
+  msg("assistant", Date.parse("2026-01-02T00:01:00+01:00") / 1000, "Antwort", { model_slug: "gpt-4o" }),
+]);
+const splitStats = Stats.compute(Parser.buildModel([{ name: "split.json", data: [midnightSplit] }]));
+assert.strictEqual(splitStats.overview.activeDays, 1, "KI-Antwort nach Mitternacht erzeugt keinen Nutzertag");
+assert.strictEqual(splitStats.activity.perDay.length, 1);
+assert.strictEqual(splitStats.activity.peakHour, 23);
+assert.strictEqual(splitStats.activity.nightPct, 0);
+
+const clockConversation = conversationFromMessages("clock", [
+  msg("user", Date.parse("2026-01-01T23:59:00+01:00") / 1000, "spät"),
+  msg("user", Date.parse("2026-01-02T00:01:00+01:00") / 1000, "früh"),
+]);
+const clockMean = Stats.compute(Parser.buildModel([{ name: "clock.json", data: [clockConversation] }])).activity.avgFirstMins;
+assert.ok(Math.min(clockMean, 1440 - clockMean) < 1.1, "23:59 und 00:01 mitteln sich zyklisch zu Mitternacht");
+
+/* ── Modellabdeckung, Gesprächsspanne und One-Shots ─────── */
+
+const manyModels = [];
+for (let i = 0; i < 8; i++) manyModels.push(conversationFromMessages(`model-${i}`, [
+  msg("user", T_MAY_27 + i * 10, "Frage"),
+  msg("assistant", T_MAY_27 + i * 10 + 1, "Antwort", { model_slug: `gpt-${i}-test` }),
+]));
+manyModels.push(conversationFromMessages("model-unknown", [
+  msg("user", T_MAY_27 + 100, "Frage"), msg("assistant", T_MAY_27 + 101, "Antwort"),
+]));
+const modelStats = Stats.compute(Parser.buildModel([{ name: "models.json", data: manyModels }]));
+assert.strictEqual(modelStats.models.dist.reduce((s, d) => s + d.count, 0), modelStats.overview.aiCount);
+assert.ok(modelStats.models.dist.some(d => d.label === "Andere"));
+assert.ok(modelStats.models.dist.some(d => d.label === "Unbekannt"));
+assert.ok(modelStats.models.coveragePct > 0 && modelStats.models.coveragePct < 100);
+
+const shortSpan = conversationFromMessages("short-span", [
+  msg("user", T_MAY_27, "Frage"), msg("assistant", T_MAY_27 + 60, "Antwort", { model_slug: "gpt-4o" }),
+], { create_time: T_MAY_27 - 86400, update_time: T_MAY_27 + 86400 * 30 });
+const zeroUser = conversationFromMessages("zero-user", [msg("assistant", T_MAY_27 + 120, "Nur KI", { model_slug: "gpt-4o" })]);
+const convStats = Stats.compute(Parser.buildModel([{ name: "duration.json", data: [shortSpan, zeroUser] }])).conversations;
+assert.ok(Math.abs(convStats.longestDur.durationDays - 60 / 86400) < 1e-12, "Dauer folgt sichtbaren Nachrichten, nicht update_time");
+assert.strictEqual(convStats.oneShot, 1, "null Nutzerfragen sind kein One-Shot");
+
+/* ── Tokenheuristik, lange Texte und Nutzer-/KI-Bilder ──── */
+
+const shortText = conversationFromMessages("short-text", [
+  msg("user", T_JAN, "kurz"), msg("assistant", T_JAN + 1, "kurz", { model_slug: "gpt-4o" }),
+]);
+const longText = conversationFromMessages("long-text", [
+  msg("user", T_JAN, "äöü漢字".repeat(10000)), msg("assistant", T_JAN + 1, "lang".repeat(10000), { model_slug: "gpt-4o" }),
+]);
+const shortImpact = Stats.compute(Parser.buildModel([{ name: "short.json", data: [shortText] }])).impact;
+const longImpact = Stats.compute(Parser.buildModel([{ name: "long.json", data: [longText] }])).impact;
+assert.ok(longImpact.visibleTextTokens > shortImpact.visibleTextTokens, "sichtbare Textheuristik bildet längeren Text ab");
+assert.strictEqual(longImpact.energyWh, shortImpact.energyWh, "unbeobachtbarer Kontext/Reasoning wird nicht aus Textlänge erfunden");
+
+const userImageConversation = conversationFromMessages("user-image", [
+  imgMsg("user", T_JAN), msg("assistant", T_JAN + 1, "gesehen", { model_slug: "gpt-4o" }),
+]);
+const userImageImpact = Stats.compute(Parser.buildModel([{ name: "user-image.json", data: [userImageConversation] }])).impact;
+assert.strictEqual(userImageImpact.imageGenWh, 0, "Nutzerbild ist keine Bildgenerierung");
+assert.ok(impact.imageGenWh > 0, "Tool-Bild bleibt als externer SDXL-Benchmark erfasst");
+
+const missingTimestamp = msg("assistant", null, "ohne Zeit", {});
+const missingStats = Stats.compute(Parser.buildModel([{ name: "missing.json", data: [conversationFromMessages("missing", [
+  msg("user", T_JAN, "Frage"), missingTimestamp,
+])] }]));
+assert.strictEqual(missingStats.quality.missingTimestamps, 1);
+
+for (const [name, value] of Object.entries(impact)) {
+  if (typeof value === "number") assert.ok(Number.isFinite(value) && value >= 0, `${name} ist endlich und nicht negativ`);
+}
+for (const pct of [impact.imageGenPct, webStats.searchSharePct, modelStats.models.coveragePct, modelStats.models.thinkingPct]) {
+  assert.ok(pct >= 0 && pct <= 100, "Prozentsatz liegt zwischen 0 und 100");
+}
 
 console.log("Regression tests passed");
