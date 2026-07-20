@@ -30,8 +30,11 @@ const Wrapped = (() => {
     return sec + " s";
   }
 
-  const fmtClock = (mins) =>
-    String(Math.floor(mins / 60)).padStart(2, "0") + ":" + String(Math.round(mins % 60)).padStart(2, "0");
+  const fmtClock = (mins) => {
+    const rounded = ((Math.round(mins) % 1440) + 1440) % 1440;
+    return String(Math.floor(rounded / 60)).padStart(2, "0") + ":" +
+      String(rounded % 60).padStart(2, "0");
+  };
 
   const fmtDate = (ts) =>
     new Date(ts * 1000).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" });
@@ -63,7 +66,7 @@ const Wrapped = (() => {
     const years = new Map();
     for (const c of model.conversations) {
       for (const m of c.msgs) {
-        if (!m.isVisible || !m.t) continue;
+        if (m.isHidden || !m.isVisible || !m.t || (m.role !== "user" && m.role !== "assistant")) continue;
         const d = new Date(m.t * 1000);
         const y = d.getFullYear();
         if (!years.has(y)) years.set(y, { year: y, msgCount: 0, months: new Map() });
@@ -81,7 +84,7 @@ const Wrapped = (() => {
     const conversations = [];
     for (const c of model.conversations) {
       const msgs = c.msgs.filter(m => m.t && inRange(m.t, range));
-      if (msgs.some(m => m.isVisible)) conversations.push({ ...c, msgs });
+      if (msgs.some(m => !m.isHidden && m.isVisible && (m.role === "user" || m.role === "assistant"))) conversations.push({ ...c, msgs });
     }
     return {
       conversations,
@@ -98,7 +101,8 @@ const Wrapped = (() => {
     const days = new Set();
     for (const c of model.conversations) {
       for (const m of c.msgs) {
-        if (!m.isVisible || !m.t || !inRange(m.t, range)) continue;
+        if (m.isHidden || !m.isVisible || !m.t || !inRange(m.t, range) ||
+            (m.role !== "user" && m.role !== "assistant")) continue;
         msgs++;
         days.add(Stats.dateKey(m.t));
       }
@@ -313,8 +317,8 @@ const Wrapped = (() => {
       html: (ctx) => {
         const I = ctx.S.impact;
         const rows = [
-          listRow("💧", `<strong>${fmtWater(I.waterMl)} Wasser</strong> — wie ${fmt1(I.showerMinutes)} Minuten duschen`),
-          listRow("🌍", `<strong>${fmtCo2(I.co2g)} CO₂</strong> — wie ${fmt1(I.carKm)} km mit dem Auto`),
+          listRow("💧", `<strong>${fmtWater(I.waterMl)} ChatGPT-Ø-Wasserbenchmark</strong> — keine Messung deines Exports`),
+          listRow("🌍", `<strong>${fmtCo2(I.co2g)} CO₂-Szenario</strong> — wenn mit globalem Strommix 2024 betrieben`),
           listRow("🔋", `entspricht <strong>${fmt1(I.phoneCharges)} Handy-Ladungen</strong>`),
         ];
         const im = ctx.impactMonth;
@@ -322,20 +326,20 @@ const Wrapped = (() => {
           const pct = (im.cur.wh - im.prev.wh) / im.prev.wh * 100;
           const up = pct >= 0;
           rows.push(listRow(up ? "📈" : "📉",
-            `<strong>${up ? "+" : "−"}${fmtPct(Math.abs(pct))} Energie</strong> im Vergleich zum ${esc(im.prevLabel)}`));
+            `<strong>${up ? "+" : "−"}${fmtPct(Math.abs(pct))} Benchmark-Energie</strong> im Vergleich zum ${esc(im.prevLabel)}`));
         }
         if (im && im.total >= 3) {
-          const rankText = im.rank === 1 ? "dein <strong>grünster Monat</strong> überhaupt 🎉"
-            : im.rank === im.total ? "dein bisher <strong>energiehungrigster Monat</strong>"
-            : `dein <strong>${im.rank}.-grünster Monat</strong> von ${im.total}`;
+          const rankText = im.rank === 1 ? "dein Monat mit dem <strong>niedrigsten Benchmark-Szenario</strong>"
+            : im.rank === im.total ? "dein Monat mit dem <strong>höchsten Benchmark-Szenario</strong>"
+            : `Platz <strong>${im.rank}</strong> von ${im.total} im Benchmark-Szenario`;
           rows.push(listRow("🌱", rankText));
         }
         return `
-        <p class="wr-kicker">Deine Umweltbilanz</p>
+        <p class="wr-kicker">Externe Umwelt-Benchmarks</p>
         <div class="wr-big">⚡ ${cnt(I.energyWh, "energy")}</div>
-        <p class="wr-title">Strom, grob geschätzt</p>
+        <p class="wr-title">Energie-Szenario</p>
         <div class="wr-list">${rows.join("")}</div>
-        <p class="wr-hint">Schätzung aus sichtbaren Tokens — der Export enthält keine Messwerte.</p>`;
+        <p class="wr-hint">Antworten × 0,34 Wh plus separater SDXL-Bildbenchmark — keine Verbrauchsmessung.</p>`;
       },
     },
     {
@@ -349,15 +353,15 @@ const Wrapped = (() => {
           if (e.wh > worst.wh) worst = e;
         }
         return `
-        <p class="wr-kicker">Grün & weniger grün</p>
+        <p class="wr-kicker">Benchmark-Vergleich</p>
         <h2 class="wr-title wr-grad">🌱 ${monthName(best.key)}</h2>
-        <p class="wr-text">war dein <strong>bester Monat</strong> — die wenigsten Umweltschäden mit nur
-        ${fmtEnergy(best.wh)} Strom und ${fmtCo2(best.co2g)} CO₂.</p>
+        <p class="wr-text">hat das <strong>niedrigste Energie-Szenario</strong> mit
+        ${fmtEnergy(best.wh)} und ${fmtCo2(best.co2g)} beim globalen Strommix 2024.</p>
         <div class="wr-list">
-          ${listRow("🏭", `<strong>${monthName(worst.key)}</strong> war dein schlechtester —
-          ${fmtEnergy(worst.wh)} Strom, ${fmtCo2(worst.co2g)} CO₂ und ${fmtWater(worst.waterMl)} Wasser`)}
+          ${listRow("🏭", `<strong>${monthName(worst.key)}</strong> hat das höchste Szenario —
+          ${fmtEnergy(worst.wh)}, ${fmtCo2(worst.co2g)} CO₂ und ${fmtWater(worst.waterMl)} ChatGPT-Ø-Wasserbenchmark`)}
         </div>
-        <p class="wr-hint">Gewertet wird der geschätzte Verbrauch: weniger ist besser.</p>`;
+        <p class="wr-hint">Verglichen werden externe Benchmarks, nicht gemessene Umweltschäden.</p>`;
       },
     },
     {

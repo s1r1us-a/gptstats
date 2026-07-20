@@ -79,19 +79,20 @@ node tests/regression.js
 - Diktat (Speech-to-Text im Textchat) speichert der Export als normalen Text — es ist nicht von getippten Nachrichten unterscheidbar. Der Live-Voice-Modus dagegen schon.
 - Denkzeiten werden aus den „Nachgedacht für …"-Angaben geparst; Textangaben wie „ein paar Sekunden" werden konservativ geschätzt.
 - Der Export enthält vereinzelt **fehlerhafte Zeitstempel** (z. B. KI-Antworten, die angeblich Wochen vor der zugehörigen Frage liegen). Solche Ausreißer werden beim Einlesen auf den Zeitpunkt der Vorgänger-Nachricht korrigiert — der Datei-Chip beim Laden zeigt an, wie viele Zeitstempel repariert wurden.
-- Die Umweltbilanz ist eine Schätzung. Energie, Wasser und CO₂ werden aus sichtbaren Prompt-/Antwort-Tokens, Kontextaufschlag und Modelltyp abgeleitet; echte Messwerte enthält der Export nicht.
+- `Zeichen ÷ 4` ist nur eine englische Faustregel für **sichtbare Text-Tokens**. Sie ist sprach- und modellabhängig; System-, Tool-, Kontext-, Cache- und Reasoning-Tokens sind im Export nicht beobachtbar.
+- Die Umweltsektion zeigt **getrennte externe Benchmarks und Szenarien**, keine persönliche Verbrauchsmessung. Das Energie-Szenario setzt sichtbare KI-Antworten mit der ChatGPT-Durchschnittsangabe von 0,34 Wh an; SDXL-Bild-, Gemini- und Mistral-Werte bleiben als anders abgegrenzte Vergleichswerte gekennzeichnet.
 
 ### Quellen für Umweltfaktoren
 
 - ChatGPT-Ø-Query: [Sam Altman, 2025](https://blog.samaltman.com/the-gentle-singularity) — ca. 0,34 Wh und 0,000085 gal Wasser pro durchschnittlicher Query.
 - Strommix global: [IEA Electricity 2025](https://www.iea.org/reports/electricity-2025/emissions) — ca. 445 g CO₂/kWh für 2024.
 - Strommix Deutschland: [Umweltbundesamt, 2025](https://www.umweltbundesamt.de/themen/co2-emissionen-pro-kilowattstunde-strom-2025-nur) — 344 g CO₂/kWh.
-- Wasser-Spanne: [OECD.AI](https://oecd.ai/en/wonk/how-much-water-does-ai-consume) / [„Making AI Less Thirsty"](https://arxiv.org/abs/2304.03271) — standortabhängige KI-Wassernutzung von etwa 1,8–12 L/kWh; die sehr niedrige Vergleichsgrenze leitet sich aus Altmans Ø-Query-Wasserangabe ab.
+- Wasser-Spanne: [OECD.AI](https://oecd.ai/en/wonk/how-much-water-does-ai-consume) / [„Making AI Less Thirsty"](https://arxiv.org/abs/2304.03271) — standortabhängiger Wasserverbrauch von etwa 1,8–12 L/kWh über Microsoft-Rechenzentren. Die Spanne ist kein statistischer Mittelwert; Wasserverbrauch und Wasserentnahme sind unterschiedliche Größen.
 - Alltag/Wasser: [EPA WaterSense Showerheads](https://www.epa.gov/watersense/showerheads) und [Residential Toilets](https://www.epa.gov/watersense/residential-toilets) — Standarddusche 2,5 gal/min; WaterSense-Toiletten 1,28 gal/Spülung.
 - Lebensmittelwasser: [Water Footprint Network](https://www.waterfootprint.org/resources/interactive-tools/product-gallery/) / [University of Twente](https://research.utwente.nl/en/publications/the-green-blue-and-grey-water-footprint-of-animals-and-animal-pro/) — u. a. Rindfleisch 15.400 m³/t.
-- Bildgenerierung: [Luccioni, Jernite & Strubell, „Power Hungry Processing" (FAccT '24)](https://arxiv.org/abs/2311.16863) — ~2,9 Wh je generiertem Bild (Stable Diffusion XL, 1.000 Inferenzen ≈ 2,907 kWh).
+- Bildgenerierung: [Luccioni, Jernite & Strubell, „Power Hungry Processing" (FAccT '24)](https://arxiv.org/abs/2311.16863) — ~2,9 Wh je Bild für Stable Diffusion XL. Das ist kein gemessener DALL·E-/GPT-Image-Verbrauch.
 - Gemini-Vergleich: [Google, „Measuring the environmental impact of delivering AI at Google Scale" (2025)](https://arxiv.org/abs/2508.15734) — Median-Gemini-Prompt ≈ 0,24 Wh, 0,26 ml Wasser, 0,03 g CO₂e.
-- Lebenszyklus-CO₂: [Mistral AI, Ökobilanz mit ADEME/Carbone 4 (2025)](https://mistral.ai/news/our-contribution-to-a-global-environmental-standard-for-ai/) — 1,14 g CO₂e je 400-Token-Antwort inkl. Training & Hardware (~2,85 g je 1.000 Antwort-Tokens).
+- Lebenszyklus-CO₂: [Mistral AI, Ökobilanz mit ADEME/Carbone 4 (2025)](https://mistral.ai/news/our-contribution-to-a-global-environmental-standard-for-ai/) — 1,14 g CO₂e je 400-Token-Le-Chat-Antwort inkl. Training & Hardware (~2,85 g je 1.000 Antwort-Tokens). Dieser externe Benchmark ist kein ChatGPT-Lebenszykluswert.
 - Baum-Vergleich: [FNR-Themenportal Wald (Kohlenstoffinventur)](https://wald.fnr.de/wissen/themendossiers/kohlenstoffspeicher/faq-kohlenstoffspeicher-wald-und-holz-in-zahlen) — eine Buche bindet grob 12,5 kg CO₂ pro Jahr.
 
 ## Lizenz

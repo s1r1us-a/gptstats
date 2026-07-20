@@ -101,6 +101,7 @@ const Parser = (() => {
   function normalizeMessage(m) {
     const ct = m.content ? m.content.content_type : null;
     const meta = m.metadata || {};
+    const isHidden = !!meta.is_visually_hidden_from_conversation;
     const out = {
       role: m.author ? m.author.role : "unknown",
       ct,
@@ -121,13 +122,14 @@ const Parser = (() => {
       codeBlocks: 0,
       searchGroups: null,     // [{domain, entries}]
       refTypes: [],
+      isHidden,
       isVisible: false,
     };
 
-    if (ct === "text" && m.content.parts) {
+    if (ct === "text" && Array.isArray(m.content.parts)) {
       out.text = cleanText(m.content.parts.filter(p => typeof p === "string").join("\n"));
-      out.isVisible = true;
-    } else if (ct === "multimodal_text" && m.content.parts) {
+      out.isVisible = !isHidden && out.text.trim().length > 0;
+    } else if (ct === "multimodal_text" && Array.isArray(m.content.parts)) {
       const texts = [];
       for (const p of m.content.parts) {
         if (typeof p === "string") { texts.push(p); continue; }
@@ -144,7 +146,10 @@ const Parser = (() => {
         }
       }
       out.text = cleanText(texts.join("\n"));
-      out.isVisible = true;
+      out.isVisible = !isHidden && (
+        out.text.trim().length > 0 || out.images.length > 0 ||
+        out.audioCount > 0 || out.rtCount > 0
+      );
     } else if (ct === "thoughts" && m.content.thoughts) {
       const texts = [];
       for (const th of m.content.thoughts) {
@@ -171,6 +176,10 @@ const Parser = (() => {
           size: a.size || 0,
         });
       }
+    }
+    // Reine Datei-Uploads können ohne sichtbaren Text exportiert werden.
+    if (!isHidden && out.attachments.length > 0 && (out.role === "user" || out.role === "assistant")) {
+      out.isVisible = true;
     }
     if (meta.code_blocks) out.codeBlocks = Object.keys(meta.code_blocks).length;
     if (Array.isArray(meta.search_result_groups)) {
@@ -220,6 +229,7 @@ const Parser = (() => {
     const totalMessageNodes = c.mapping
       ? Object.values(c.mapping).filter(node => node && node.message).length
       : msgs.length;
+    const hiddenMsgs = msgs.filter(m => m.isHidden).length;
 
     // Kaputte Zeitstempel reparieren: Der Export enthält vereinzelt Antworten,
     // deren create_time WEIT vor der zugehörigen Frage liegt (z. T. Wochen).
@@ -249,6 +259,7 @@ const Parser = (() => {
       isArchived: !!c.is_archived,
       isStarred: !!c.is_starred,
       skippedAltMsgs: Math.max(0, totalMessageNodes - msgs.length),
+      hiddenMsgs,
       repairedTimestamps,
       msgs,
     };
@@ -417,7 +428,10 @@ const Parser = (() => {
 
   async function readFiles(fileList) {
     const files = [...fileList].filter(f => /\.json$/i.test(f.name) || f.type === "application/json");
-    const results = await Promise.all(files.map(readFile));
+    // Große Export-Shards nicht gleichzeitig als Text und JSON im Speicher
+    // halten. Sequenzielles Lesen begrenzt den zusätzlichen Spitzenbedarf.
+    const results = [];
+    for (const file of files) results.push(await readFile(file));
     return {
       payloads: results.filter(r => !r.error),
       errors: results.filter(r => r.error),

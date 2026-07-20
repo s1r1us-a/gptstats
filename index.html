@@ -160,11 +160,11 @@
 
     <section class="section reveal" id="oekobilanz">
       <div class="section-head">
-        <p class="section-eyebrow">Fußabdruck</p>
-        <h2>Deine Umweltbilanz</h2>
+        <p class="section-eyebrow">Externe Vergleichswerte</p>
+        <h2>Umwelt-Szenarien</h2>
       </div>
       <div class="impact-block">
-        <h3>Ressourcen</h3>
+        <h3>Benchmarks &amp; Szenarien</h3>
         <div class="stat-grid" id="grid-oeko"></div>
       </div>
       <div class="impact-block">
@@ -185,14 +185,16 @@
       </div>
       <div class="chart-grid" id="charts-oeko"></div>
       <p class="impact-note glass">
-        <strong>Nur eine Schätzung.</strong> Der ChatGPT-Export enthält keine echten Mess­werte —
-        Wasser, Energie und CO₂ werden aus sichtbaren Prompt- und Antwort-Tokens, einem kleinen
-        Kontextaufschlag und dem Modelltyp abgeleitet. Reasoning-Modelle zählen stärker; falls
-        Denkzeit-Marker im Export stehen, beeinflussen sie die Gewichtung. Grundlage: grobe
-        Text-Inferenzwerte um ~0,34 Wh je Ø-Query, ein globaler Strommix nach IEA und
-        ein Wasser-Mittelwert aus veröffentlichten Spannen. Die Wasserkarte zeigt deshalb
-        zusätzlich eine Spanne von sehr niedriger Ø-Query-Angabe bis zu OECD-Werten für
-        standortabhängige KI-Wassernutzung.
+        <strong>Keine Verbrauchsmessung.</strong> Der ChatGPT-Export enthält weder verarbeitete
+        Tokens noch Energie-, Wasser- oder CO₂-Messwerte. Die Karten halten unterschiedliche
+        Funktions­einheiten bewusst getrennt: sichtbarer Text wird nur grob mit Zeichen ÷ 4
+        geschätzt; das Energie-Szenario setzt sichtbare KI-Antworten mit der externen
+        ChatGPT-Durchschnittsangabe von 0,34 Wh an. Unbekannte System-, Tool-, Kontext-, Cache-
+        und Reasoning-Tokens werden nicht erfunden.
+        Die ChatGPT-Wasserkarte zeigt separat die Anbieter-Durchschnittsangabe von 0,000085 gal
+        je Query. Die OECD-Spanne 1,8–12 L/kWh ist ein standortabhängiges Szenario über
+        Rechenzentren und besitzt keinen belastbaren Mittelpunkt. Wasserverbrauch und
+        Wasserentnahme sind unterschiedliche Größen.
         Video-Streaming meint die grobe Gesamtketten-Schätzung aus Endgerät, Netzwerk und
         Rechenzentren, nicht nur den Serveranteil eines Anbieters.
         Wasservergleiche nutzen EPA-WaterSense-Durchflusswerte; Mobilitätsvergleiche nutzen
@@ -200,11 +202,11 @@
         UBA-Strommix 2025.
         Steak- und Avocado-Karten zeigen virtuelles Produktionswasser; Kaffee berücksichtigt
         zusätzlich ein CO₂-Äquivalent für schwarzen Kaffee.
-        KI-generierte Bilder gehen mit ~2,9 Wh je Bild in die Energieschätzung ein
-        (Luccioni et al. 2024). Die Lebenszyklus-Karte nutzt die Mistral-Ökobilanz 2025
-        (mit ADEME), die auch Training und Hardware-Herstellung einrechnet, dabei aber nur
-        die Antwortlänge zugrunde legt — je nach Reasoning-Anteil kann sie über oder unter
-        der Inferenz-Schätzung liegen. Der Buchen-Vergleich rechnet mit ~12,5 kg
+        KI-generierte Bilder erscheinen separat als SDXL-Benchmark von ~2,9 Wh je Bild
+        (Luccioni et al. 2024), nicht als gemessener DALL·E-/GPT-Image-Verbrauch.
+        Die Lebenszyklus-Karte ist eine lineare Übertragung der Mistral-Le-Chat-Ökobilanz 2025
+        auf grob geschätzte sichtbare Antwort-Tokens; sie ist kein ChatGPT-Wert und wird nicht
+        zur Strommix-Rechnung addiert. Der Buchen-Vergleich rechnet mit ~12,5 kg
         CO₂-Bindung pro Baum und Jahr; der Gemini-Vergleich mit Googles 0,24 Wh je
         Median-Prompt (2025).
       </p>
